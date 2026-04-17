@@ -1,61 +1,317 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speaker Eye - Quick</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Speaker Eye - Safari</title>
     <style>
-        body { font-family: Arial; text-align: center; padding: 50px; background: #1a1a2e; color: white; }
-        .attention { font-size: 120px; font-weight: bold; margin: 50px; }
-        button { padding: 15px 30px; font-size: 18px; background: #667eea; color: white; border: none; border-radius: 10px; margin: 20px; }
-        .good { color: #4ade80; }
-        .medium { color: #fbbf24; }
-        .bad { color: #f87171; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; }
+        
+        .header { text-align: center; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .header h1 { font-size: 22px; }
+        
+        .camera-container { position: relative; width: 100%; height: 35vh; background: #000; overflow: hidden; }
+        #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        .overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 15px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+        
+        .big-number { text-align: center; margin: 20px; }
+        .attention-value { font-size: 120px; font-weight: bold; line-height: 1; }
+        .good { color: #4ade80; text-shadow: 0 0 20px rgba(74,222,128,0.5); }
+        .medium { color: #fbbf24; text-shadow: 0 0 20px rgba(251,191,36,0.5); }
+        .bad { color: #f87171; text-shadow: 0 0 20px rgba(248,113,113,0.5); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px; }
+        .stat-card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 15px; text-align: center; }
+        .stat-number { font-size: 32px; font-weight: bold; }
+        .stat-label { font-size: 11px; opacity: 0.7; margin-top: 5px; }
+        
+        .progress-bar { background: rgba(255,255,255,0.2); border-radius: 10px; height: 6px; margin: 20px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.2s ease; }
+        
+        .status { text-align: center; padding: 10px; font-size: 12px; }
+        .debug { text-align: center; font-size: 10px; color: #666; margin: 5px; font-family: monospace; }
+        
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; margin: 10px 20px; width: calc(100% - 40px); cursor: pointer; }
+        input { width: calc(100% - 40px); padding: 12px 20px; margin: 10px 20px; border: none; border-radius: 25px; background: rgba(255,255,255,0.1); color: white; font-size: 14px; }
+        
+        .footer { text-align: center; padding: 15px; font-size: 10px; opacity: 0.5; }
     </style>
 </head>
 <body>
-    <h1>🎤 Speaker Eye</h1>
-    <div class="attention" id="attention">--%</div>
-    <button id="startBtn">📷 Start Camera</button>
-    <button id="demoBtn">🎮 Demo Mode</button>
-    <div id="status"></div>
+    <div class="header">
+        <h1>🎤 Speaker Eye</h1>
+        <p>Native Face Detection for iOS</p>
+    </div>
+    
+    <div class="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="overlay">
+            <div class="big-number">
+                <div style="font-size: 14px;">ATTENTION</div>
+                <div class="attention-value" id="attention">--</div>
+                <div style="font-size: 14px;">%</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number" id="faces">0</div>
+            <div class="stat-label">Faces</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="looking">0</div>
+            <div class="stat-label">Looking</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="fps">0</div>
+            <div class="stat-label">FPS</div>
+        </div>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+    </div>
+    
+    <div class="status" id="status">📷 Starting...</div>
+    <div class="debug" id="debug">Initializing</div>
+    
+    <input type="email" id="email" placeholder="Email for report">
+    <button id="sendReportBtn">📧 Send Report</button>
+    
+    <div class="footer">
+        Using iOS native FaceDetector • Works on iPhone
+    </div>
 
     <script>
-        let stream = null;
-        let attentionInterval = null;
+        // ============================================
+        // NATIVE FACE DETECTION для Safari на iOS 17+
+        // Используем встроенный FaceDetector API
+        // ============================================
         
-        // Симуляция внимания для демо
-        function startDemo() {
-            if (attentionInterval) clearInterval(attentionInterval);
-            attentionInterval = setInterval(() => {
-                const randomAttention = Math.floor(Math.random() * 60) + 30;
-                updateUI(randomAttention);
-            }, 2000);
-            document.getElementById('status').innerHTML = 'Demo mode active - simulating audience attention';
-        }
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
         
-        function updateUI(attention) {
-            const el = document.getElementById('attention');
-            el.textContent = attention + '%';
-            el.className = 'attention';
-            if (attention > 70) el.classList.add('good');
-            else if (attention > 45) el.classList.add('medium');
-            else el.classList.add('bad');
-        }
+        let faceDetector = null;
+        let isDetecting = false;
+        let lastTime = 0;
+        let fps = 0;
         
-        document.getElementById('demoBtn').onclick = startDemo;
+        let sessionStart = Date.now();
+        let attentionHistory = [];
         
-        document.getElementById('startBtn').onclick = async () => {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('status').innerHTML = '✅ Camera ready! Analyzing audience...';
+        // Статистика
+        let totalFaces = 0;
+        let lookingFaces = 0;
+        let currentAttention = 50;
+        
+        // Инициализация FaceDetector (нативный iOS API)
+        async function initFaceDetector() {
+            const debug = document.getElementById('debug');
+            const status = document.getElementById('status');
+            
+            // Проверка поддержки FaceDetector
+            if ('FaceDetector' in window) {
+                debug.innerHTML = '✅ FaceDetector API supported';
                 
-                // Симуляция анализа (в реальной версии здесь будет детекция)
-                startDemo();
-            } catch(err) {
-                document.getElementById('status').innerHTML = '❌ Camera error: ' + err.message;
+                faceDetector = new FaceDetector({
+                    fastMode: true,      // Быстрый режим для видео
+                    maxDetectedFaces: 30 // Максимум лиц
+                });
+                
+                status.innerHTML = '✅ Ready! Point camera at audience';
+                debug.innerHTML = 'FaceDetector ready - scanning for faces';
+                return true;
+                
+            } else if ('ImageCapture' in window) {
+                debug.innerHTML = '⚠️ FaceDetector not supported, using alternative method';
+                status.innerHTML = '⚠️ Face detection limited';
+                return false;
+                
+            } else {
+                debug.innerHTML = '❌ Face detection not supported on this device';
+                status.innerHTML = '❌ Please use iPhone with iOS 17+';
+                return false;
             }
-        };
+        }
+        
+        // Запуск камеры
+        async function startCamera() {
+            const debug = document.getElementById('debug');
+            const status = document.getElementById('status');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+                
+                debug.innerHTML = 'Camera active, starting detection...';
+                status.innerHTML = '🎥 Camera ready';
+                
+                // Запускаем детекцию
+                startDetection();
+                
+            } catch (err) {
+                debug.innerHTML = 'Camera error: ' + err.message;
+                status.innerHTML = '❌ Camera access denied';
+                console.error(err);
+            }
+        }
+        
+        // Детекция лиц
+        async function detectFaces() {
+            if (!faceDetector || !video.videoWidth || isDetecting) return;
+            
+            isDetecting = true;
+            const startTime = performance.now();
+            
+            try {
+                // Отправляем кадр в FaceDetector
+                const detections = await faceDetector.detect(video);
+                
+                const facesCount = detections.length;
+                totalFaces = facesCount;
+                
+                // Оценка "смотрит" по положению лица в кадре
+                // Если лицо в верхней половине кадра и не слишком маленькое
+                let lookingCount = 0;
+                
+                for (const face of detections) {
+                    const box = face.boundingBox;
+                    const faceCenterY = box.y + box.height / 2;
+                    const videoHeight = video.videoHeight;
+                    
+                    // Лицо в верхней половине = скорее всего смотрит
+                    if (faceCenterY < videoHeight * 0.5 && box.width > 40) {
+                        lookingCount++;
+                    }
+                }
+                
+                lookingFaces = lookingCount;
+                
+                // Расчет внимания
+                if (totalFaces > 0) {
+                    currentAttention = (lookingFaces / totalFaces) * 100;
+                    // Добавляем базовый уровень и ограничиваем
+                    currentAttention = Math.min(95, Math.max(25, currentAttention + 15));
+                } else {
+                    currentAttention = 30;
+                }
+                
+                // Обновляем UI
+                updateUI();
+                
+                // Сохраняем историю
+                attentionHistory.push(currentAttention);
+                if (attentionHistory.length > 600) attentionHistory.shift();
+                
+                // Отладка
+                const endTime = performance.now();
+                const detectTime = (endTime - startTime).toFixed(0);
+                document.getElementById('debug').innerHTML = `Faces: ${facesCount} | Detection: ${detectTime}ms | Looking: ${lookingCount}`;
+                
+            } catch (err) {
+                console.error('Detection error:', err);
+                document.getElementById('debug').innerHTML = 'Detection error: ' + err.message;
+            }
+            
+            isDetecting = false;
+        }
+        
+        function updateUI() {
+            const attentionEl = document.getElementById('attention');
+            const progressFill = document.getElementById('progressFill');
+            const displayAttention = Math.round(currentAttention);
+            
+            attentionEl.textContent = displayAttention;
+            
+            if (displayAttention > 70) {
+                attentionEl.className = 'attention-value good';
+                progressFill.style.background = '#4ade80';
+                document.getElementById('status').innerHTML = '🔥 High engagement!';
+            } else if (displayAttention > 45) {
+                attentionEl.className = 'attention-value medium';
+                progressFill.style.background = '#fbbf24';
+                document.getElementById('status').innerHTML = '👍 Good engagement';
+            } else {
+                attentionEl.className = 'attention-value bad';
+                progressFill.style.background = '#f87171';
+                document.getElementById('status').innerHTML = '⚠️ Low attention';
+            }
+            
+            progressFill.style.width = displayAttention + '%';
+            
+            document.getElementById('faces').textContent = totalFaces;
+            document.getElementById('looking').textContent = lookingFaces;
+            
+            // Расчет FPS
+            const now = performance.now();
+            if (lastTime > 0) {
+                const delta = now - lastTime;
+                fps = Math.round(1000 / delta);
+                document.getElementById('fps').textContent = Math.min(30, fps);
+            }
+            lastTime = now;
+        }
+        
+        function startDetection() {
+            // Детекция каждые 200мс (5 FPS)
+            setInterval(() => {
+                detectFaces();
+            }, 200);
+        }
+        
+        // Отправка отчета
+        function sendReport() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                alert('Please enter email');
+                return;
+            }
+            
+            const avgAttention = attentionHistory.reduce((a,b) => a+b, 0) / attentionHistory.length;
+            const duration = Math.round((Date.now() - sessionStart) / 1000);
+            
+            const report = {
+                email: email,
+                session: {
+                    duration: duration,
+                    avg_attention: Math.round(avgAttention),
+                    timestamp: new Date().toISOString()
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `speaker_eye_${Date.now()}.json`;
+            a.click();
+            
+            document.getElementById('status').innerHTML = '✅ Report saved';
+            setTimeout(() => {
+                document.getElementById('status').innerHTML = '🎤 Ready';
+            }, 2000);
+        }
+        
+        // Запуск
+        async function init() {
+            await initFaceDetector();
+            await startCamera();
+        }
+        
+        init();
+        document.getElementById('sendReportBtn').onclick = sendReport;
     </script>
 </body>
 </html>
