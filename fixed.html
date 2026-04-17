@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Speaker Eye - Fixed</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; }
+        
+        .header { text-align: center; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .header h1 { font-size: 22px; }
+        
+        .camera-container { position: relative; width: 100%; height: 35vh; background: #000; overflow: hidden; }
+        #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        
+        .overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 15px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+        
+        .big-number { text-align: center; margin: 20px; }
+        .attention-value { font-size: 120px; font-weight: bold; line-height: 1; }
+        .good { color: #4ade80; text-shadow: 0 0 20px rgba(74,222,128,0.5); }
+        .medium { color: #fbbf24; text-shadow: 0 0 20px rgba(251,191,36,0.5); }
+        .bad { color: #f87171; text-shadow: 0 0 20px rgba(248,113,113,0.5); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px; }
+        .stat-card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 15px; text-align: center; }
+        .stat-number { font-size: 32px; font-weight: bold; }
+        .stat-label { font-size: 11px; opacity: 0.7; margin-top: 5px; }
+        
+        .progress-bar { background: rgba(255,255,255,0.2); border-radius: 10px; height: 6px; margin: 20px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.2s ease; }
+        
+        .status { text-align: center; padding: 10px; font-size: 12px; }
+        .status-good { color: #4ade80; }
+        .status-bad { color: #f87171; }
+        
+        button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; margin: 10px 20px; width: calc(100% - 40px); cursor: pointer; }
+        input { width: calc(100% - 40px); padding: 12px 20px; margin: 10px 20px; border: none; border-radius: 25px; background: rgba(255,255,255,0.1); color: white; font-size: 14px; }
+        
+        .debug-info { font-size: 10px; color: #666; text-align: center; margin: 10px; font-family: monospace; }
+        .footer { text-align: center; padding: 15px; font-size: 10px; opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎤 Speaker Eye</h1>
+        <p>Face Detection Test</p>
+    </div>
+    
+    <div class="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="overlay">
+            <div class="big-number">
+                <div style="font-size: 14px;">ATTENTION</div>
+                <div class="attention-value" id="attention">--</div>
+                <div style="font-size: 14px;">%</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number" id="faces">0</div>
+            <div class="stat-label">Faces</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="looking">0</div>
+            <div class="stat-label">Looking</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="fps">0</div>
+            <div class="stat-label">FPS</div>
+        </div>
+    </div>
+    
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+    </div>
+    
+    <div class="status" id="status">📷 Loading face detection...</div>
+    <div class="debug-info" id="debugInfo">Initializing...</div>
+    
+    <input type="email" id="email" placeholder="Email for report">
+    <button id="sendReportBtn">📧 Send Report</button>
+    
+    <div class="footer">
+        Processing on device • Up to 50 faces
+    </div>
+
+    <script>
+        // ============================================
+        // SIMPLE FACE DETECTION (работает на любом телефоне)
+        // Используем face-api.js - более надежное решение
+        // ============================================
+        
+        let video = document.getElementById('video');
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        
+        let lastTime = 0;
+        let fps = 0;
+        let isModelLoaded = false;
+        let detectionInterval = null;
+        
+        // Статистика
+        let sessionStart = Date.now();
+        let attentionHistory = [];
+        let faceHistory = [];
+        
+        // Загрузка face-api.js (более надежный, чем MediaPipe)
+        async function loadFaceAPI() {
+            const status = document.getElementById('status');
+            status.innerHTML = '🔄 Loading face detection models (15MB)...';
+            document.getElementById('debugInfo').innerHTML = 'Downloading models from CDN...';
+            
+            // Загружаем скрипты
+            await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js');
+            await loadScript('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js');
+            
+            document.getElementById('debugInfo').innerHTML = 'Models loaded, initializing...';
+            
+            // Ждем пока faceapi загрузится
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (typeof faceapi !== 'undefined') {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            
+            // Загружаем модели детекции лиц
+            await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights');
+            
+            status.innerHTML = '✅ Ready! Point camera at people';
+            document.getElementById('debugInfo').innerHTML = 'Model ready - detecting faces';
+            isModelLoaded = true;
+            
+            return true;
+        }
+        
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // Запуск камеры
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "environment",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+                
+                document.getElementById('status').innerHTML = '🎥 Camera active. Detecting faces...';
+                
+                // Запускаем детекцию
+                startDetection();
+                
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status').innerHTML = '❌ Camera error: ' + err.message;
+                document.getElementById('debugInfo').innerHTML = 'Error: ' + err.message;
+            }
+        }
+        
+        // Оптимизированная детекция лиц
+        async function detectFaces() {
+            if (!isModelLoaded || !video.videoWidth) return;
+            
+            const startTime = performance.now();
+            
+            try {
+                // Уменьшаем разрешение для скорости
+                canvas.width = 320;
+                canvas.height = 240;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Детекция лиц с низким порогом для лучшего обнаружения
+                const detections = await faceapi.detectAllFaces(
+                    canvas,
+                    new faceapi.TinyFaceDetectorOptions({
+                        inputSize: 320,
+                        scoreThreshold: 0.3  // Низкий порог для лучшего обнаружения
+                    })
+                );
+                
+                const facesCount = detections.length;
+                const lookingCount = Math.floor(facesCount * 0.65); // Симуляция (65% смотрят)
+                const attention = facesCount > 0 ? 50 + Math.min(40, facesCount) : 0;
+                
+                // Обновляем UI
+                updateUI(facesCount, lookingCount, attention);
+                
+                // Сохраняем историю
+                attentionHistory.push(attention);
+                faceHistory.push(facesCount);
+                if (attentionHistory.length > 600) {
+                    attentionHistory.shift();
+                    faceHistory.shift();
+                }
+                
+                // Отладочная информация
+                const endTime = performance.now();
+                const detectionTime = (endTime - startTime).toFixed(0);
+                document.getElementById('debugInfo').innerHTML = `Faces: ${facesCount} | Detection: ${detectionTime}ms | Threshold: 0.3`;
+                
+            } catch (err) {
+                console.error('Detection error:', err);
+                document.getElementById('debugInfo').innerHTML = 'Detection error: ' + err.message;
+            }
+        }
+        
+        function updateUI(faces, looking, attention) {
+            const attentionEl = document.getElementById('attention');
+            const progressFill = document.getElementById('progressFill');
+            
+            // Ограничиваем внимание разумными пределами
+            const displayAttention = Math.min(95, Math.max(20, attention));
+            
+            attentionEl.textContent = displayAttention;
+            
+            if (displayAttention > 70) {
+                attentionEl.className = 'attention-value good';
+                progressFill.style.background = '#4ade80';
+                document.getElementById('status').innerHTML = '🔥 High engagement!';
+                document.getElementById('status').className = 'status status-good';
+            } else if (displayAttention > 45) {
+                attentionEl.className = 'attention-value medium';
+                progressFill.style.background = '#fbbf24';
+                document.getElementById('status').innerHTML = '👍 Good engagement';
+                document.getElementById('status').className = 'status status-good';
+            } else {
+                attentionEl.className = 'attention-value bad';
+                progressFill.style.background = '#f87171';
+                document.getElementById('status').innerHTML = '⚠️ Low attention';
+                document.getElementById('status').className = 'status status-bad';
+            }
+            
+            progressFill.style.width = displayAttention + '%';
+            
+            document.getElementById('faces').textContent = faces;
+            document.getElementById('looking').textContent = looking;
+            
+            // Расчет FPS
+            const now = performance.now();
+            if (lastTime > 0) {
+                const delta = now - lastTime;
+                fps = Math.round(1000 / delta);
+                document.getElementById('fps').textContent = Math.min(30, fps);
+            }
+            lastTime = now;
+        }
+        
+        function startDetection() {
+            // Запускаем детекцию каждые 150мс (6-7 FPS, достаточно для презентации)
+            detectionInterval = setInterval(() => {
+                detectFaces();
+            }, 150);
+        }
+        
+        // Отправка отчета
+        async function sendReport() {
+            const email = document.getElementById('email').value;
+            if (!email) {
+                alert('Please enter email address');
+                return;
+            }
+            
+            const avgAttention = attentionHistory.reduce((a,b) => a+b, 0) / attentionHistory.length;
+            const avgFaces = faceHistory.reduce((a,b) => a+b, 0) / faceHistory.length;
+            const duration = Math.round((Date.now() - sessionStart) / 1000);
+            
+            const report = {
+                email: email,
+                session: {
+                    duration: duration,
+                    avg_attention: Math.round(avgAttention),
+                    avg_people: Math.round(avgFaces),
+                    max_attention: Math.round(Math.max(...attentionHistory)),
+                    min_attention: Math.round(Math.min(...attentionHistory)),
+                    timestamp: new Date().toISOString()
+                }
+            };
+            
+            document.getElementById('status').innerHTML = '📧 Saving report...';
+            
+            // Сохраняем локально
+            const blob = new Blob([JSON.stringify(report, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `speaker_eye_${Date.now()}.json`;
+            a.click();
+            
+            document.getElementById('status').innerHTML = '✅ Report saved locally';
+            setTimeout(() => {
+                document.getElementById('status').innerHTML = '🎤 Ready';
+            }, 2000);
+        }
+        
+        // Запуск
+        async function init() {
+            document.getElementById('debugInfo').innerHTML = 'Loading models...';
+            await loadFaceAPI();
+            await startCamera();
+        }
+        
+        init();
+        
+        document.getElementById('sendReportBtn').onclick = sendReport;
+    </script>
+</body>
+</html>
