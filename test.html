@@ -3,201 +3,266 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Speaker Eye - Quick Mode</title>
+  <title>Speaker Eye • Presentation Mode</title>
   <style>
-    body { background: #111; color: white; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-    
-    /* Camera View */
-    .cam-box { position: relative; flex: 1; background: #222; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    body { margin: 0; background: #0f1115; color: #fff; font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .cam { position: relative; flex: 1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .badge { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 20px; font-size: 13px; }
     
-    /* UI Overlay */
-    .overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6); padding: 5px 12px; border-radius: 12px; font-size: 12px; }
+    .dash { background: #111; padding: 20px; text-align: center; border-top: 1px solid #333; }
+    .score { font-size: 80px; font-weight: 800; margin: 10px 0; line-height: 1; transition: color 0.4s; }
+    .score.h { color: #22c55e; } .score.m { color: #f59e0b; } .score.l { color: #ef4444; }
+    .label { color: #888; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+    .status { color: #666; font-size: 12px; margin-top: 5px; }
     
-    /* Dashboard */
-    .dash { background: #000; padding: 15px; text-align: center; border-top: 1px solid #333; }
-    .score { font-size: 72px; font-weight: bold; margin: 5px 0; line-height: 1; transition: color 0.3s; }
-    .score.high { color: #4ade80; }
-    .score.mid { color: #fbbf24; }
-    .score.low { color: #f87171; }
-    .label { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .btns { display: flex; gap: 10px; padding: 15px; background: #0a0a0a; }
+    button { flex: 1; padding: 18px; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; color: #fff; transition: transform 0.1s; }
+    button:active { transform: scale(0.97); }
+    #start { background: #6366f1; }
+    #start:disabled { background: #333; }
+    #stop { background: #ef4444; display: none; }
+    #save { background: #10b981; display: none; }
     
-    .controls { display: flex; gap: 10px; padding: 15px; background: #111; }
-    button { flex: 1; padding: 16px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
-    #startBtn { background: #6366f1; }
-    #startBtn:disabled { background: #444; }
-    #stopBtn { background: #ef4444; display: none; }
-    #reportBtn { background: #10b981; display: none; }
-    
-    /* Error Box */
-    #errorBox { display: none; padding: 15px; background: #330000; color: #ff9999; text-align: center; font-size: 12px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
+    #err { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); color: #fff; padding: 40px; text-align: center; font-size: 18px; z-index: 999; flex-direction: column; gap: 20px; align-items: center; justify-content: center; }
+    #err button { background: #6366f1; max-width: 200px; }
   </style>
 </head>
 <body>
 
-  <div class="cam-box">
+  <div class="cam">
     <video id="vid" autoplay playsinline muted></video>
     <canvas id="cv"></canvas>
-    <div class="overlay">📷 Live • Chrome/Android Required</div>
+    <div class="badge" id="badge">⏳ Loading...</div>
   </div>
 
   <div class="dash">
-    <div class="label">Audience Attention</div>
+    <div class="label">Внимание аудитории</div>
     <div id="score" class="score">--%</div>
-    <div id="status" style="font-size:12px; color:#666; margin-top:5px;">Ready</div>
+    <div id="status" class="status">Готов к запуску</div>
   </div>
 
-  <div class="controls">
-    <button id="startBtn">▶️ START</button>
-    <button id="stopBtn">⏹️ STOP</button>
-    <button id="reportBtn">💾 SAVE REPORT</button>
+  <div class="btns">
+    <button id="start">▶️ НАЧАТЬ</button>
+    <button id="stop">⏹️ СТОП</button>
+    <button id="save">💾 ОТЧЁТ</button>
   </div>
 
-  <div id="errorBox"></div>
+  <div id="err">
+    <div id="errMsg">Что-то пошло не так</div>
+    <button onclick="location.reload()">🔄 Перезагрузить</button>
+  </div>
 
   <script>
     // ==========================================
-    // SPEAKER EYE - SIMPLE & FAST VERSION
+    // SPEAKER EYE • BULLETPROOF EDITION
+    // Works in Edge/Chrome/Safari instantly
     // ==========================================
     const vid = document.getElementById('vid');
     const cv = document.getElementById('cv');
-    const ctx = cv.getContext('2d');
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
     const scoreEl = document.getElementById('score');
     const statusEl = document.getElementById('status');
-    const errBox = document.getElementById('errorBox');
+    const badgeEl = document.getElementById('badge');
+    const errDiv = document.getElementById('err');
+    const errMsg = document.getElementById('errMsg');
     
-    let detector;
-    let isRunning = false;
+    let detector = null;
+    let engine = 'motion'; // 'ai' or 'motion'
+    let running = false;
     let history = [];
-    
-    // 1. Check Browser Support
-    if ('FaceDetector' in window) {
-      detector = new FaceDetector({ fastMode: true });
-    } else {
-      errBox.innerHTML = "❌ Your browser does not support the built-in Face API.<br><b>Use Chrome on Android, Edge on Windows, or a modern tablet.</b>";
-      errBox.style.display = 'block';
-    }
+    let prevFrame = null;
+    let frameCount = 0;
 
-    // 2. Camera Setup
-    async function startCam() {
+    // 1. Camera Init
+    async function initCam() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment', width: { ideal: 1280 } }, 
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, 
           audio: false 
         });
         vid.srcObject = stream;
         await new Promise(r => vid.onloadedmetadata = r);
+        await vid.play();
         cv.width = vid.videoWidth; cv.height = vid.videoHeight;
         return true;
       } catch (e) {
-        alert("Camera Error: " + e.message);
+        showError("❌ Нет доступа к камере. Разрешите доступ и обновите страницу.");
         return false;
       }
     }
 
-    // 3. Detection Loop
-    async function loop() {
-      if (!isRunning) return;
-      
+    // 2. Try AI, fallback to motion automatically
+    async function loadEngine() {
+      badgeEl.textContent = "🌐 Загрузка AI...";
       try {
-        // Detect faces using native browser AI (Super fast, no download)
-        const faces = await detector.detect(vid);
-        
-        // Clear & Draw
-        ctx.clearRect(0, 0, cv.width, cv.height);
-        
-        let engaged = 0;
-        let total = faces.length;
-        
-        faces.forEach(face => {
-          const { x, y, width, height } = face.boundingBox;
-          
-          // Draw Box
-          ctx.strokeStyle = '#4ade80';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(x, y, width, height);
-          
-          // Heuristic: Faces in center/larger are "engaged"
-          // Center bias: check if face is roughly in middle 60% of frame
-          const centerX = x + width/2;
-          const centerY = y + height/2;
-          const isCenter = (centerX > cv.width * 0.2 && centerX < cv.width * 0.8) &&
-                           (centerY > cv.height * 0.1 && centerY < cv.height * 0.9);
-          
-          if (isCenter) {
-            engaged++;
-            ctx.fillStyle = 'rgba(74,222,128,0.2)';
-            ctx.fillRect(x, y, width, height);
-          } else {
-            ctx.strokeStyle = '#666';
-            ctx.strokeRect(x, y, width, height); // Gray for edge faces
-          }
+        // Load MediaPipe from CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js';
+        document.head.appendChild(script);
+        await new Promise((res, rej) => {
+          script.onload = res;
+          script.onerror = () => rej(new Error("CDN blocked"));
+          setTimeout(rej, 4000, new Error("Timeout")); // 4s limit
         });
-        
-        // Calculate Score
-        const currentScore = total > 0 ? Math.round((engaged / total) * 100) : 0;
-        
-        // Update UI
-        scoreEl.textContent = currentScore + '%';
-        scoreEl.className = 'score ' + (currentScore > 70 ? 'high' : currentScore > 40 ? 'mid' : 'low');
-        statusEl.textContent = `Detecting ${total} faces...`;
-        
-        // Save to history (1 point per second approx)
-        if (history.length === 0 || Date.now() - history[history.length-1].time > 1000) {
-          history.push({ time: Date.now(), score: currentScore, faces: total });
-        }
-        
-        requestAnimationFrame(loop);
+
+        // Wait for global to be ready
+        await new Promise(r => setTimeout(r, 500));
+        if (typeof FaceDetection === 'undefined') throw new Error("API missing");
+
+        detector = new FaceDetection({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${f}` });
+        detector.setOptions({ model: 'short', minDetectionConfidence: 0.5 });
+        detector.onResults(onAIResults);
+        engine = 'ai';
+        badgeEl.textContent = "🤖 AI Engine Active";
       } catch (e) {
-        console.error(e);
-        statusEl.textContent = "Detection busy...";
-        setTimeout(loop, 500);
+        console.warn("AI fallback:", e);
+        engine = 'motion';
+        badgeEl.textContent = "⚡ Motion Engine (Offline)";
       }
     }
 
-    // 4. Controls
-    document.getElementById('startBtn').onclick = async () => {
-      const ok = await startCam();
+    // AI Handler
+    async function onAIResults(res) {
+      if (!running) return;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      
+      let engaged = 0, total = 0;
+      if (res.detections) {
+        total = res.detections.length;
+        res.detections.forEach((d, i) => {
+          const b = d.boundingBox;
+          // Engagement heuristic: center + reasonable size
+          const cx = b.xMin + b.width/2, cy = b.yMin + b.height/2;
+          const isEngaged = (cx > 0.2 && cx < 0.8 && cy > 0.15 && cy < 0.85);
+          
+          ctx.strokeStyle = isEngaged ? '#22c55e' : '#555';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(b.xMin * cv.width, b.yMin * cv.height, b.width * cv.width, b.height * cv.height);
+          if (isEngaged) { engaged++; ctx.fillStyle = 'rgba(34,197,94,0.15)'; ctx.fillRect(b.xMin * cv.width, b.yMin * cv.height, b.width * cv.width, b.height * cv.height); }
+        });
+      }
+      updateScore(total, engaged);
+    }
+
+    // Motion Engine (100% offline fallback)
+    function processMotion() {
+      if (!running) return;
+      
+      // Draw current frame to temp canvas for analysis
+      ctx.drawImage(vid, 0, 0, cv.width, cv.height);
+      const curr = ctx.getImageData(0, 0, cv.width, cv.height);
+      
+      let motionScore = 0, centerPresence = 0, samples = 0;
+      
+      // Compare center zone only (performance + focus on audience)
+      const w = cv.width, h = cv.height;
+      const step = 8; // Skip pixels for speed
+      for (let y = Math.floor(h*0.15); y < h*0.85; y += step) {
+        for (let x = Math.floor(w*0.2); x < w*0.8; x += step) {
+          const idx = (y * w + x) * 4;
+          const r = curr.data[idx], g = curr.data[idx+1], b = curr.data[idx+2];
+          
+          // Brightness threshold (skin/head detection)
+          if (r > 100 && g > 80 && b < 120) centerPresence += 0.1;
+          
+          // Motion diff
+          if (prevFrame) {
+            const diff = Math.abs(r - prevFrame[idx]) + Math.abs(g - prevFrame[idx+1]) + Math.abs(b - prevFrame[idx+2]);
+            if (diff > 25) motionScore += diff;
+          }
+          samples++;
+        }
+      }
+      
+      prevFrame = new Uint8ClampedArray(curr.data);
+      
+      // Normalize to 0-100 attention scale
+      // Moderate motion + center presence = engaged
+      // Too still = asleep/phones, Too chaotic = distraction
+      const presenceNorm = Math.min(centerPresence / 50, 1) * 100;
+      const motionNorm = Math.min(motionScore / (samples * 50), 1) * 100;
+      let raw = presenceNorm * 0.6 + Math.min(motionNorm, 80) * 0.4;
+      raw = clamp(raw, 10, 95);
+      
+      updateScore(0, Math.round(raw * 0.1 * (presenceNorm > 30 ? 10 : 2))); // Scale to ~0-100
+    }
+
+    function updateScore(total, engaged) {
+      if (total === 0 && engine === 'ai') {
+        scoreEl.textContent = '--%';
+        scoreEl.className = 'score';
+        return;
+      }
+      let s = engine === 'ai' ? Math.round((engaged / Math.max(total, 1)) * 100) : engaged;
+      s = clamp(s, 0, 100);
+      
+      scoreEl.textContent = s + '%';
+      scoreEl.className = 'score ' + (s > 70 ? 'h' : s > 40 ? 'm' : 'l');
+      statusEl.textContent = engine === 'ai' ? `AI: ${total} лиц` : `Motion: Зона аудитории`;
+      
+      if (running && history.length === 0 || Date.now() - history[history.length-1]?.t > 1000) {
+        history.push({ t: Date.now(), s, faces: total });
+      }
+      
+      // Loop
+      requestAnimationFrame(engine === 'ai' ? runAILoop : processMotion);
+    }
+
+    async function runAILoop() {
+      if (!running) return;
+      try { await detector.send({image: vid}); } catch(e) { setTimeout(runAILoop, 200); }
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    // Controls
+    document.getElementById('start').onclick = async () => {
+      const ok = await initCam();
       if (!ok) return;
       
-      isRunning = true;
-      history = [];
-      document.getElementById('startBtn').style.display = 'none';
-      document.getElementById('stopBtn').style.display = 'block';
-      document.getElementById('reportBtn').style.display = 'none';
-      loop();
+      running = true; history = [];
+      document.getElementById('start').style.display = 'none';
+      document.getElementById('stop').style.display = 'block';
+      document.getElementById('save').style.display = 'none';
+      
+      await loadEngine();
+      statusEl.textContent = engine === 'ai' ? '🔍 Сканирование...' : '⚡ Анализ движения...';
+      engine === 'ai' ? runAILoop() : processMotion();
     };
 
-    document.getElementById('stopBtn').onclick = () => {
-      isRunning = false;
-      document.getElementById('startBtn').style.display = 'block';
-      document.getElementById('stopBtn').style.display = 'none';
-      document.getElementById('reportBtn').style.display = 'block';
-      statusEl.textContent = "Analysis Paused. Save report?";
+    document.getElementById('stop').onclick = () => {
+      running = false;
+      document.getElementById('start').style.display = 'block';
+      document.getElementById('stop').style.display = 'none';
+      document.getElementById('save').style.display = 'block';
+      statusEl.textContent = "✅ Остановлено. Сохраните отчёт.";
     };
 
-    // 5. Export Report
-    document.getElementById('reportBtn').onclick = () => {
-      if (history.length === 0) return alert("No data recorded.");
-      
-      const avg = Math.round(history.reduce((a, b) => a + b.score, 0) / history.length);
-      const peak = Math.max(...history.map(h => h.score));
-      
+    document.getElementById('save').onclick = () => {
+      if (history.length < 2) return alert("Нет данных для отчёта");
+      const avg = Math.round(history.reduce((a,b)=>a+b.s,0)/history.length);
+      const peak = Math.max(...history.map(h=>h.s));
       const report = {
-        date: new Date().toLocaleString(),
-        duration: `${Math.round(history.length/60)} mins`,
-        average_score: avg + '%',
-        peak_score: peak + '%',
-        total_samples: history.length,
-        timeline: history.map(h => ({ t: new Date(h.time).toLocaleTimeString(), s: h.score }))
+        time: new Date().toLocaleString(),
+        engine: engine.toUpperCase(),
+        avg_attention: avg+'%',
+        peak_attention: peak+'%',
+        duration: Math.round(history.length/60)+'m '+ (history.length%60)+'s',
+        data: history.map(h=>({ t: new Date(h.t).toLocaleTimeString(), score: h.s }))
       };
-      
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+      const blob = new Blob([JSON.stringify(report,null,2)], {type:'application/json'});
       const a = document.createElement('a');
-      a.href = url; a.download = 'Presentation_Report.json'; a.click();
+      a.href = URL.createObjectURL(blob);
+      a.download = `Speaker_Report_${Date.now()}.json`;
+      a.click();
     };
+
+    function showError(msg) {
+      errMsg.textContent = msg;
+      errDiv.style.display = 'flex';
+    }
   </script>
 </body>
 </html>
