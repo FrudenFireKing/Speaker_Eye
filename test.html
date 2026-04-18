@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speaker Eye - Quick Mode</title>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    /* Camera View */
+    .cam-box { position: relative; flex: 1; background: #222; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    
+    /* UI Overlay */
+    .overlay { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6); padding: 5px 12px; border-radius: 12px; font-size: 12px; }
+    
+    /* Dashboard */
+    .dash { background: #000; padding: 15px; text-align: center; border-top: 1px solid #333; }
+    .score { font-size: 72px; font-weight: bold; margin: 5px 0; line-height: 1; transition: color 0.3s; }
+    .score.high { color: #4ade80; }
+    .score.mid { color: #fbbf24; }
+    .score.low { color: #f87171; }
+    .label { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    
+    .controls { display: flex; gap: 10px; padding: 15px; background: #111; }
+    button { flex: 1; padding: 16px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+    #startBtn { background: #6366f1; }
+    #startBtn:disabled { background: #444; }
+    #stopBtn { background: #ef4444; display: none; }
+    #reportBtn { background: #10b981; display: none; }
+    
+    /* Error Box */
+    #errorBox { display: none; padding: 15px; background: #330000; color: #ff9999; text-align: center; font-size: 12px; position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
+  </style>
+</head>
+<body>
+
+  <div class="cam-box">
+    <video id="vid" autoplay playsinline muted></video>
+    <canvas id="cv"></canvas>
+    <div class="overlay">📷 Live • Chrome/Android Required</div>
+  </div>
+
+  <div class="dash">
+    <div class="label">Audience Attention</div>
+    <div id="score" class="score">--%</div>
+    <div id="status" style="font-size:12px; color:#666; margin-top:5px;">Ready</div>
+  </div>
+
+  <div class="controls">
+    <button id="startBtn">▶️ START</button>
+    <button id="stopBtn">⏹️ STOP</button>
+    <button id="reportBtn">💾 SAVE REPORT</button>
+  </div>
+
+  <div id="errorBox"></div>
+
+  <script>
+    // ==========================================
+    // SPEAKER EYE - SIMPLE & FAST VERSION
+    // ==========================================
+    const vid = document.getElementById('vid');
+    const cv = document.getElementById('cv');
+    const ctx = cv.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const statusEl = document.getElementById('status');
+    const errBox = document.getElementById('errorBox');
+    
+    let detector;
+    let isRunning = false;
+    let history = [];
+    
+    // 1. Check Browser Support
+    if ('FaceDetector' in window) {
+      detector = new FaceDetector({ fastMode: true });
+    } else {
+      errBox.innerHTML = "❌ Your browser does not support the built-in Face API.<br><b>Use Chrome on Android, Edge on Windows, or a modern tablet.</b>";
+      errBox.style.display = 'block';
+    }
+
+    // 2. Camera Setup
+    async function startCam() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment', width: { ideal: 1280 } }, 
+          audio: false 
+        });
+        vid.srcObject = stream;
+        await new Promise(r => vid.onloadedmetadata = r);
+        cv.width = vid.videoWidth; cv.height = vid.videoHeight;
+        return true;
+      } catch (e) {
+        alert("Camera Error: " + e.message);
+        return false;
+      }
+    }
+
+    // 3. Detection Loop
+    async function loop() {
+      if (!isRunning) return;
+      
+      try {
+        // Detect faces using native browser AI (Super fast, no download)
+        const faces = await detector.detect(vid);
+        
+        // Clear & Draw
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        
+        let engaged = 0;
+        let total = faces.length;
+        
+        faces.forEach(face => {
+          const { x, y, width, height } = face.boundingBox;
+          
+          // Draw Box
+          ctx.strokeStyle = '#4ade80';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x, y, width, height);
+          
+          // Heuristic: Faces in center/larger are "engaged"
+          // Center bias: check if face is roughly in middle 60% of frame
+          const centerX = x + width/2;
+          const centerY = y + height/2;
+          const isCenter = (centerX > cv.width * 0.2 && centerX < cv.width * 0.8) &&
+                           (centerY > cv.height * 0.1 && centerY < cv.height * 0.9);
+          
+          if (isCenter) {
+            engaged++;
+            ctx.fillStyle = 'rgba(74,222,128,0.2)';
+            ctx.fillRect(x, y, width, height);
+          } else {
+            ctx.strokeStyle = '#666';
+            ctx.strokeRect(x, y, width, height); // Gray for edge faces
+          }
+        });
+        
+        // Calculate Score
+        const currentScore = total > 0 ? Math.round((engaged / total) * 100) : 0;
+        
+        // Update UI
+        scoreEl.textContent = currentScore + '%';
+        scoreEl.className = 'score ' + (currentScore > 70 ? 'high' : currentScore > 40 ? 'mid' : 'low');
+        statusEl.textContent = `Detecting ${total} faces...`;
+        
+        // Save to history (1 point per second approx)
+        if (history.length === 0 || Date.now() - history[history.length-1].time > 1000) {
+          history.push({ time: Date.now(), score: currentScore, faces: total });
+        }
+        
+        requestAnimationFrame(loop);
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Detection busy...";
+        setTimeout(loop, 500);
+      }
+    }
+
+    // 4. Controls
+    document.getElementById('startBtn').onclick = async () => {
+      const ok = await startCam();
+      if (!ok) return;
+      
+      isRunning = true;
+      history = [];
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('stopBtn').style.display = 'block';
+      document.getElementById('reportBtn').style.display = 'none';
+      loop();
+    };
+
+    document.getElementById('stopBtn').onclick = () => {
+      isRunning = false;
+      document.getElementById('startBtn').style.display = 'block';
+      document.getElementById('stopBtn').style.display = 'none';
+      document.getElementById('reportBtn').style.display = 'block';
+      statusEl.textContent = "Analysis Paused. Save report?";
+    };
+
+    // 5. Export Report
+    document.getElementById('reportBtn').onclick = () => {
+      if (history.length === 0) return alert("No data recorded.");
+      
+      const avg = Math.round(history.reduce((a, b) => a + b.score, 0) / history.length);
+      const peak = Math.max(...history.map(h => h.score));
+      
+      const report = {
+        date: new Date().toLocaleString(),
+        duration: `${Math.round(history.length/60)} mins`,
+        average_score: avg + '%',
+        peak_score: peak + '%',
+        total_samples: history.length,
+        timeline: history.map(h => ({ t: new Date(h.time).toLocaleTimeString(), s: h.score }))
+      };
+      
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'Presentation_Report.json'; a.click();
+    };
+  </script>
+</body>
+</html>
