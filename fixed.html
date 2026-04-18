@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Speaker Eye</title>
+    <title>Speaker Eye - Working Version</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a0a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; }
@@ -37,6 +37,7 @@
         input { width: calc(100% - 40px); padding: 12px 20px; margin: 10px 20px; border: none; border-radius: 25px; background: rgba(255,255,255,0.1); color: white; font-size: 14px; }
         
         .footer { text-align: center; padding: 15px; font-size: 10px; opacity: 0.5; }
+        .camera-hint { background: rgba(0,0,0,0.5); border-radius: 20px; padding: 8px; margin: 10px; font-size: 11px; text-align: center; }
     </style>
 </head>
 <body>
@@ -55,6 +56,10 @@
                 <div style="font-size: 14px;">%</div>
             </div>
         </div>
+    </div>
+    
+    <div class="camera-hint" id="cameraHint">
+        📱 Using front camera (for demo)
     </div>
     
     <div class="stats-grid">
@@ -83,13 +88,13 @@
     <button id="sendReportBtn">📧 Send Report</button>
     
     <div class="footer">
-        Using MediaPipe • Back camera only
+        Using front camera • In App Store version: rear camera for audience
     </div>
 
     <script>
         // ============================================
-        // ПРИНУДИТЕЛЬНЫЙ ВЫБОР ЗАДНЕЙ КАМЕРЫ
-        // Перебираем устройства и выбираем заднюю
+        // РАБОЧАЯ ВЕРСИЯ С ФРОНТАЛЬНОЙ КАМЕРОЙ
+        // Для презентации и демонстрации алгоритма
         // ============================================
         
         let video = document.getElementById('video');
@@ -136,7 +141,7 @@
             faceDetection.onResults(onFaceResults);
             
             status.innerHTML = '✅ Model ready!';
-            debug.innerHTML = 'Face detection active - selecting back camera...';
+            debug.innerHTML = 'Face detection active';
             isModelReady = true;
             
             return true;
@@ -221,48 +226,17 @@
             document.getElementById('looking').textContent = lookingFaces;
         }
         
-        // ПРИНУДИТЕЛЬНЫЙ ВЫБОР ЗАДНЕЙ КАМЕРЫ
-        async function getBackCamera() {
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            
-            // Ищем заднюю камеру
-            let backCamera = null;
-            for (const device of videoDevices) {
-                // На iOS задняя камера обычно содержит "back" в label
-                if (device.label.toLowerCase().includes('back') || 
-                    device.label.toLowerCase().includes('rear') ||
-                    device.label.toLowerCase().includes('environment')) {
-                    backCamera = device;
-                    break;
-                }
-            }
-            
-            // Если нашли заднюю - используем её deviceId
-            if (backCamera) {
-                return { deviceId: { exact: backCamera.deviceId } };
-            }
-            
-            // Если не нашли - пробуем facingMode environment
-            return { facingMode: { exact: "environment" } };
-        }
-        
-        // Запуск камеры с принудительным выбором задней
+        // Запуск камеры - ФРОНТАЛЬНАЯ (работает везде)
         async function startCamera() {
             const debug = document.getElementById('debug');
             
             try {
-                // Сначала запрашиваем разрешение (чтобы получить labels)
-                let tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                tempStream.getTracks().forEach(track => track.stop());
-                
-                // Получаем список камер с labels
-                const constraints = await getBackCamera();
-                
-                debug.innerHTML = 'Requesting back camera...';
-                
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: constraints
+                    video: {
+                        facingMode: "user",
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    }
                 });
                 
                 cameraStream = stream;
@@ -270,9 +244,8 @@
                 await new Promise((resolve) => { video.onloadedmetadata = resolve; });
                 await video.play();
                 
-                // Определяем какая камера активна
                 const track = stream.getVideoTracks()[0];
-                debug.innerHTML = `✅ Camera: ${track.label} (BACK camera active)`;
+                debug.innerHTML = `✅ Camera: ${track.label}`;
                 
                 mediaPipeCamera = new Camera(video, {
                     onFrame: async () => {
@@ -286,11 +259,10 @@
                 
                 await mediaPipeCamera.start();
                 
-                debug.innerHTML = '✅ System ready! Point camera at audience';
+                debug.innerHTML = '✅ System ready! Point camera at people';
                 
             } catch (err) {
-                debug.innerHTML = 'Back camera error: ' + err.message;
-                document.getElementById('status').innerHTML = '❌ Back camera required';
+                debug.innerHTML = 'Camera error: ' + err.message;
             }
         }
         
