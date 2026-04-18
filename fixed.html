@@ -496,8 +496,8 @@
       
       // Configuration
       mode: 'smart', // smart | simple | demo
-      minFaceSize: 0.03, // Min face area ratio to consider
-      gazeThreshold: 25, // Max head yaw/pitch degrees to count as "looking"
+      minFaceSize: 0.003, // Min face area ratio to consider
+      gazeThreshold: 30, // Max head yaw/pitch degrees to count as "looking"
       
       // UI
       chartData: [],
@@ -638,7 +638,7 @@
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
           },
           runningMode: 'VIDEO',
-          numFaces: 5, // Limit for mobile performance
+          numFaces: 10, // Limit for mobile performance
           minFaceDetectionConfidence: 0.5,
           minFacePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5
