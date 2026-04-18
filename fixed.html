@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Speaker Eye - Working Tracker</title>
+    <title>Speaker Eye - Final</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a0a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; }
@@ -33,6 +33,23 @@
         .status { text-align: center; padding: 10px; font-size: 12px; }
         .debug { text-align: center; font-size: 10px; color: #aaa; margin: 5px; font-family: monospace; }
         
+        .camera-switch {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            z-index: 100;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
         button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; margin: 10px 20px; width: calc(100% - 40px); cursor: pointer; }
         input { width: calc(100% - 40px); padding: 12px 20px; margin: 10px 20px; border: none; border-radius: 25px; background: rgba(255,255,255,0.1); color: white; font-size: 14px; }
         
@@ -55,6 +72,10 @@
                 <div style="font-size: 14px;">%</div>
             </div>
         </div>
+    </div>
+    
+    <div class="camera-switch" id="switchCameraBtn" style="display:none;">
+        🔄
     </div>
     
     <div class="stats-grid">
@@ -83,13 +104,12 @@
     <button id="sendReportBtn">📧 Send Report</button>
     
     <div class="footer">
-        Using BlazeFace model • Works on modern browsers
+        Using MediaPipe • Works on modern browsers
     </div>
 
     <script>
         // ============================================
-        // ПРОСТАЯ И НАДЕЖНАЯ ДЕТЕКЦИЯ ЛИЦ
-        // Используем MediaPipe через CDN (работает в Safari)
+        // РАБОЧАЯ ВЕРСИЯ С ПЕРЕКЛЮЧЕНИЕМ КАМЕРЫ
         // ============================================
         
         let video = document.getElementById('video');
@@ -100,6 +120,9 @@
         let isModelReady = false;
         let lastTime = 0;
         let fps = 0;
+        let cameraStream = null;
+        let mediaPipeCamera = null;
+        let currentFacingMode = 'environment'; // 'user' = фронтальная, 'environment' = задняя
         
         let totalFaces = 0;
         let lookingFaces = 0;
@@ -116,19 +139,17 @@
             status.innerHTML = '📥 Loading MediaPipe (25MB)...';
             debug.innerHTML = 'Downloading face detection model...';
             
-            // Загружаем MediaPipe
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js');
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js');
             
             debug.innerHTML = 'Models loaded, initializing...';
             
-            // Инициализация FaceDetection
             faceDetection = new FaceDetection({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
             });
             
             faceDetection.setOptions({
-                model: 'short',  // 'short' для близких лиц, 'full' для дальних
+                model: 'short',
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5
             });
@@ -152,7 +173,6 @@
             });
         }
         
-        // Обработка результатов детекции
         function onFaceResults(results) {
             if (!results.detections) {
                 totalFaces = 0;
@@ -165,20 +185,16 @@
             const faces = results.detections;
             totalFaces = faces.length;
             
-            // Оценка "смотрит" по положению bounding box
             let lookingCount = 0;
             for (const face of faces) {
                 const bbox = face.boundingBox;
                 if (bbox && bbox.relativeVertices) {
-                    // Анализ положения лица в кадре
                     const centerY = (bbox.relativeVertices[0].y + bbox.relativeVertices[2].y) / 2;
                     const width = bbox.width;
                     
-                    // Если лицо в верхней половине и достаточно крупное
                     if (centerY < 0.55 && width > 0.08) {
                         lookingCount++;
                     } else if (width > 0.15) {
-                        // Близкие лица тоже считаем (они обычно смотрят)
                         lookingCount++;
                     }
                 }
@@ -186,10 +202,8 @@
             
             lookingFaces = lookingCount;
             
-            // Расчет процента внимания
             if (totalFaces > 0) {
                 let rawAttention = (lookingFaces / totalFaces) * 100;
-                // Нормализация и добавление базового уровня
                 currentAttention = Math.min(95, Math.max(30, rawAttention + 15));
             } else {
                 currentAttention = 30;
@@ -197,7 +211,6 @@
             
             updateUI();
             
-            // Сохраняем историю
             attentionHistory.push(currentAttention);
             if (attentionHistory.length > 600) attentionHistory.shift();
         }
@@ -229,29 +242,37 @@
             document.getElementById('looking').textContent = lookingFaces;
         }
         
-        // Запуск камеры и обработки
-        async function startCamera() {
+        // Запуск камеры с выбранным режимом
+        async function startCamera(facingMode) {
             const debug = document.getElementById('debug');
+            
+            // Останавливаем старую камеру
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            
+            if (mediaPipeCamera) {
+                mediaPipeCamera.stop();
+            }
             
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: "environment",
+                        facingMode: { exact: facingMode },
                         width: { ideal: 640 },
                         height: { ideal: 480 }
                     }
                 });
                 
+                cameraStream = stream;
                 video.srcObject = stream;
                 await new Promise((resolve) => { video.onloadedmetadata = resolve; });
-                
-                debug.innerHTML = 'Camera active, processing frames...';
-                
-                // Запускаем обработку кадров
                 await video.play();
                 
+                debug.innerHTML = `Camera active (${facingMode === 'environment' ? 'BACK' : 'FRONT'}), processing...`;
+                
                 // Создаем Camera объект MediaPipe
-                const camera = new Camera(video, {
+                mediaPipeCamera = new Camera(video, {
                     onFrame: async () => {
                         if (isModelReady && faceDetection) {
                             await faceDetection.send({image: video});
@@ -261,25 +282,54 @@
                     height: 480
                 });
                 
-                camera.start();
+                await mediaPipeCamera.start();
                 
-                // FPS счетчик
-                setInterval(() => {
-                    const now = performance.now();
-                    if (lastTime > 0) {
-                        const delta = now - lastTime;
-                        fps = Math.round(1000 / delta);
-                        document.getElementById('fps').textContent = Math.min(30, fps);
-                    }
-                    lastTime = now;
-                }, 1000);
+                // Показываем кнопку переключения
+                document.getElementById('switchCameraBtn').style.display = 'flex';
                 
                 debug.innerHTML = '✅ System running! Point camera at audience';
                 
             } catch (err) {
-                debug.innerHTML = 'Camera error: ' + err.message;
+                debug.innerHTML = `Camera error (${facingMode}): ${err.message}`;
                 console.error(err);
+                
+                // Пробуем без exact
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: facingMode,
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
+                    });
+                    cameraStream = stream;
+                    video.srcObject = stream;
+                    await video.play();
+                    debug.innerHTML = `Camera active (fallback mode)`;
+                } catch (fallbackErr) {
+                    debug.innerHTML = 'Camera error: ' + fallbackErr.message;
+                }
             }
+        }
+        
+        // Переключение камеры
+        async function switchCamera() {
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            document.getElementById('debug').innerHTML = `Switching to ${currentFacingMode === 'environment' ? 'BACK' : 'FRONT'} camera...`;
+            await startCamera(currentFacingMode);
+        }
+        
+        // FPS счетчик
+        function startFpsCounter() {
+            setInterval(() => {
+                const now = performance.now();
+                if (lastTime > 0) {
+                    const delta = now - lastTime;
+                    fps = Math.round(1000 / delta);
+                    document.getElementById('fps').textContent = Math.min(30, fps);
+                }
+                lastTime = now;
+            }, 1000);
         }
         
         // Отправка отчета
@@ -322,10 +372,13 @@
         // Запуск
         async function init() {
             await loadMediaPipe();
-            await startCamera();
+            await startCamera('environment'); // Задняя камера по умолчанию
+            startFpsCounter();
         }
         
         init();
+        
+        document.getElementById('switchCameraBtn').onclick = switchCamera;
         document.getElementById('sendReportBtn').onclick = sendReport;
     </script>
 </body>
