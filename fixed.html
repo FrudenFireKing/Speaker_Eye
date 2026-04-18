@@ -488,6 +488,11 @@
       engagedFaces: 0,
       attentionScore: 0,
       attentionHistory: [],
+
+      // Motion analysis
+      prevFrame: null,
+      motionScore: 0,       // 0 = нет движения, 100 = хаос
+      motionHistory: [],
       
       // Configuration
       mode: 'smart', // smart | simple | demo
@@ -515,6 +520,41 @@
       }
       console.log(...args);
     };
+
+    function computeMotion(ctx, width, height) {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+  
+      if (!state.prevFrame) {
+        state.prevFrame = new Uint8ClampedArray(data);
+        return 0;
+      }
+
+      let diff = 0;
+      const step = 4 * 8; // берём каждый 8-й пиксель (ускорение)
+    
+      for (let i = 0; i < data.length; i += step) {
+        const dr = Math.abs(data[i] - state.prevFrame[i]);
+        const dg = Math.abs(data[i+1] - state.prevFrame[i+1]);
+        const db = Math.abs(data[i+2] - state.prevFrame[i+2]);
+    
+        diff += (dr + dg + db);
+      }
+    
+      // нормализация
+      const maxDiff = (data.length / step) * 255 * 3;
+      let motion = (diff / maxDiff) * 100;
+    
+      // clamp
+      motion = Math.min(100, motion);
+    
+      // сохранить текущий кадр
+      state.prevFrame.set(data);
+    
+      return motion;
+    }
+
+
     
     const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
     const lerp = (a, b, t) => a + (b - a) * t;
@@ -694,6 +734,25 @@
             state.processCanvas.width,
             state.processCanvas.height
           );
+
+          // ===== Motion Analysis =====
+          const motionRaw = computeMotion(
+            state.ctx,
+            state.processCanvas.width,
+            state.processCanvas.height
+          );
+
+          // подавление шума (например, автофокус/зерно)
+          if (motionRaw < 2) {
+            state.motionScore = 0;
+          } else {
+            state.motionScore = smoothAttention(motionRaw, 0.2);
+          }
+
+          
+          // сглаживание
+          state.motionScore = smoothAttention(motionRaw, 0.2);
+
           
           // Run detection based on mode
           if (state.mode === 'demo') {
@@ -786,12 +845,28 @@
       }
       
       // Calculate attention score
+      // ===== Combined Attention Model =====
+      
+      // Face-based attention (если есть лица)
+      let faceScore = 0;
+      
       if (state.faces.length > 0) {
-        const ratio = (state.engagedFaces / state.faces.length) * 100;
-        state.attentionScore = smoothAttention(clamp(ratio, 0, 100));
+        faceScore = (state.engagedFaces / state.faces.length) * 100;
       } else {
-        state.attentionScore = smoothAttention(20); // Low default
+        faceScore = 30; // fallback если лиц нет
       }
+      
+      // Motion-based attention (инверсия: меньше движения = лучше)
+      const motionAttention = 100 - state.motionScore;
+      
+      // Финальная формула
+      const combined =
+        0.4 * faceScore +
+        0.6 * motionAttention;
+      
+      // сглаживание
+      state.attentionScore = smoothAttention(clamp(combined, 0, 100), 0.15);
+
     }
     
     // Simplified head pose estimation using landmark geometry [[1]][[3]]
