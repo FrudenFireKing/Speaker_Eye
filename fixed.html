@@ -33,23 +33,6 @@
         .status { text-align: center; padding: 10px; font-size: 12px; }
         .debug { text-align: center; font-size: 10px; color: #aaa; margin: 5px; font-family: monospace; }
         
-        .camera-switch {
-            position: fixed;
-            bottom: 100px;
-            right: 20px;
-            background: rgba(0,0,0,0.6);
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            cursor: pointer;
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.3);
-        }
-        
         button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: bold; margin: 10px 20px; width: calc(100% - 40px); cursor: pointer; }
         input { width: calc(100% - 40px); padding: 12px 20px; margin: 10px 20px; border: none; border-radius: 25px; background: rgba(255,255,255,0.1); color: white; font-size: 14px; }
         
@@ -59,7 +42,7 @@
 <body>
     <div class="header">
         <h1>🎤 Speaker Eye</h1>
-        <p>Real Face Detection</p>
+        <p>Audience Attention Tracker</p>
     </div>
     
     <div class="camera-container">
@@ -72,10 +55,6 @@
                 <div style="font-size: 14px;">%</div>
             </div>
         </div>
-    </div>
-    
-    <div class="camera-switch" id="switchCameraBtn" style="display:none;">
-        🔄
     </div>
     
     <div class="stats-grid">
@@ -104,12 +83,12 @@
     <button id="sendReportBtn">📧 Send Report</button>
     
     <div class="footer">
-        Using MediaPipe • Works on modern browsers
+        Using MediaPipe • Back camera only • Works on modern browsers
     </div>
 
     <script>
         // ============================================
-        // РАБОЧАЯ ВЕРСИЯ С ПЕРЕКЛЮЧЕНИЕМ КАМЕРЫ
+        // ФИНАЛЬНАЯ ВЕРСИЯ - ТОЛЬКО ЗАДНЯЯ КАМЕРА
         // ============================================
         
         let video = document.getElementById('video');
@@ -122,7 +101,6 @@
         let fps = 0;
         let cameraStream = null;
         let mediaPipeCamera = null;
-        let currentFacingMode = 'environment'; // 'user' = фронтальная, 'environment' = задняя
         
         let totalFaces = 0;
         let lookingFaces = 0;
@@ -136,7 +114,7 @@
             const debug = document.getElementById('debug');
             const status = document.getElementById('status');
             
-            status.innerHTML = '📥 Loading MediaPipe (25MB)...';
+            status.innerHTML = '📥 Loading AI model (25MB)...';
             debug.innerHTML = 'Downloading face detection model...';
             
             await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js');
@@ -157,7 +135,7 @@
             faceDetection.onResults(onFaceResults);
             
             status.innerHTML = '✅ Model ready!';
-            debug.innerHTML = 'Face detection active';
+            debug.innerHTML = 'Face detection active - point camera at audience';
             isModelReady = true;
             
             return true;
@@ -242,23 +220,14 @@
             document.getElementById('looking').textContent = lookingFaces;
         }
         
-        // Запуск камеры с выбранным режимом
-        async function startCamera(facingMode) {
+        // Запуск камеры - ТОЛЬКО ЗАДНЯЯ
+        async function startCamera() {
             const debug = document.getElementById('debug');
-            
-            // Останавливаем старую камеру
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-            }
-            
-            if (mediaPipeCamera) {
-                mediaPipeCamera.stop();
-            }
             
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: { exact: facingMode },
+                        facingMode: { exact: "environment" },
                         width: { ideal: 640 },
                         height: { ideal: 480 }
                     }
@@ -269,9 +238,8 @@
                 await new Promise((resolve) => { video.onloadedmetadata = resolve; });
                 await video.play();
                 
-                debug.innerHTML = `Camera active (${facingMode === 'environment' ? 'BACK' : 'FRONT'}), processing...`;
+                debug.innerHTML = 'Back camera active, processing audience...';
                 
-                // Создаем Camera объект MediaPipe
                 mediaPipeCamera = new Camera(video, {
                     onFrame: async () => {
                         if (isModelReady && faceDetection) {
@@ -284,20 +252,16 @@
                 
                 await mediaPipeCamera.start();
                 
-                // Показываем кнопку переключения
-                document.getElementById('switchCameraBtn').style.display = 'flex';
-                
-                debug.innerHTML = '✅ System running! Point camera at audience';
+                debug.innerHTML = '✅ System ready! Point camera at audience';
                 
             } catch (err) {
-                debug.innerHTML = `Camera error (${facingMode}): ${err.message}`;
-                console.error(err);
+                debug.innerHTML = 'Back camera error: ' + err.message;
                 
                 // Пробуем без exact
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
                         video: {
-                            facingMode: facingMode,
+                            facingMode: "environment",
                             width: { ideal: 640 },
                             height: { ideal: 480 }
                         }
@@ -305,18 +269,11 @@
                     cameraStream = stream;
                     video.srcObject = stream;
                     await video.play();
-                    debug.innerHTML = `Camera active (fallback mode)`;
+                    debug.innerHTML = 'Back camera active (fallback mode)';
                 } catch (fallbackErr) {
                     debug.innerHTML = 'Camera error: ' + fallbackErr.message;
                 }
             }
-        }
-        
-        // Переключение камеры
-        async function switchCamera() {
-            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-            document.getElementById('debug').innerHTML = `Switching to ${currentFacingMode === 'environment' ? 'BACK' : 'FRONT'} camera...`;
-            await startCamera(currentFacingMode);
         }
         
         // FPS счетчик
@@ -372,13 +329,12 @@
         // Запуск
         async function init() {
             await loadMediaPipe();
-            await startCamera('environment'); // Задняя камера по умолчанию
+            await startCamera();
             startFpsCounter();
         }
         
         init();
         
-        document.getElementById('switchCameraBtn').onclick = switchCamera;
         document.getElementById('sendReportBtn').onclick = sendReport;
     </script>
 </body>
