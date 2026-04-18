@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1">
   <meta name="description" content="Анализируйте внимание аудитории во время выступления с помощью камеры телефона">
-  <title>Speaker Eye Pro v3.0 • Zone-Based Crowd Analytics</title>
+  <title>Speaker Eye Pro • Audience Attention Tracker</title>
   <style>
     :root {
       --primary: #6366f1;
@@ -29,6 +29,7 @@
       touch-action: manipulation;
     }
     
+    /* Header */
     .header {
       text-align: center;
       padding: 12px 16px;
@@ -41,6 +42,7 @@
     .header h1 { font-size: 1.1rem; font-weight: 700; }
     .header p { font-size: 0.8rem; opacity: 0.9; margin-top: 2px; }
     
+    /* Camera Area */
     .camera-wrapper {
       position: relative;
       width: 100%;
@@ -53,7 +55,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1);
+      transform: scaleX(-1); /* Mirror for front camera */
     }
     
     #overlay {
@@ -99,6 +101,7 @@
       z-index: 10;
     }
     
+    /* Attention Display */
     .attention-card {
       margin: 16px;
       background: var(--surface);
@@ -135,6 +138,7 @@
       background: linear-gradient(90deg, var(--danger), var(--warning), var(--success));
     }
     
+    /* Stats Grid */
     .stats {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -158,6 +162,7 @@
       margin-top: 4px;
     }
     
+    /* Status Bar */
     .status-bar {
       margin: 16px;
       padding: 10px 16px;
@@ -177,6 +182,7 @@
     .status-dot.ready { background: var(--success); }
     .status-dot.error { background: var(--danger); }
     
+    /* Controls */
     .controls {
       padding: 0 16px 16px;
       display: flex;
@@ -209,6 +215,7 @@
       background: linear-gradient(135deg, var(--danger), #dc2626);
     }
     
+    /* Mode Toggle */
     .mode-toggle {
       display: flex;
       gap: 8px;
@@ -232,6 +239,7 @@
       background: rgba(99,102,241,0.2);
     }
     
+    /* Chart Area */
     .chart-container {
       margin: 16px;
       background: var(--surface);
@@ -250,6 +258,7 @@
       border-radius: 8px;
     }
     
+    /* Email Input */
     .input-group {
       display: flex;
       gap: 8px;
@@ -266,6 +275,7 @@
     }
     .input-group input::placeholder { color: var(--text-dim); }
     
+    /* Footer */
     .footer {
       text-align: center;
       padding: 20px 16px 30px;
@@ -273,6 +283,7 @@
       color: var(--text-dim);
     }
     
+    /* Debug Console (collapsible) */
     .debug-toggle {
       text-align: center;
       padding: 8px;
@@ -293,8 +304,10 @@
     }
     .debug-console.show { display: block; }
     
+    /* Hidden canvas for processing */
     #processCanvas { display: none; }
     
+    /* Loading Overlay */
     .loading-overlay {
       position: fixed;
       inset: 0;
@@ -315,11 +328,13 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     
+    /* Responsive */
     @media (min-height: 800px) {
       .camera-wrapper { height: 45vh; }
       .attention-value { font-size: 5rem; }
     }
     
+    /* Accessibility */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -327,40 +342,23 @@
         transition-duration: 0.01ms !important;
       }
     }
-    
-    /* Zone heatmap legend */
-    .zone-legend {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      padding: 8px 16px;
-      font-size: 0.75rem;
-      color: var(--text-dim);
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .legend-color {
-      width: 16px; height: 16px;
-      border-radius: 4px;
-      border: 1px solid rgba(255,255,255,0.3);
-    }
   </style>
 </head>
 <body>
+  <!-- Loading Screen -->
   <div class="loading-overlay" id="loadingScreen">
     <div class="loading-spinner"></div>
     <div>Загрузка AI моделей...</div>
     <div style="font-size: 0.8rem; color: var(--text-dim)">Требуется интернет для первой загрузки</div>
   </div>
 
+  <!-- Header -->
   <header class="header">
-    <h1>🎤 Speaker Eye Pro v3.0</h1>
-    <p>Зональный анализ внимания аудитории</p>
+    <h1>🎤 Speaker Eye Pro</h1>
+    <p>Анализ внимания аудитории в реальном времени</p>
   </header>
 
+  <!-- Camera -->
   <div class="camera-wrapper">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
@@ -376,8 +374,9 @@
     </div>
   </div>
 
+  <!-- Attention Display -->
   <section class="attention-card">
-    <div class="attention-label">ОБЩИЙ УРОВЕНЬ ВНИМАНИЯ</div>
+    <div class="attention-label">УРОВЕНЬ ВНИМАНИЯ</div>
     <div class="attention-value unknown" id="attentionValue">--</div>
     <div class="attention-bar">
       <div class="attention-fill" id="attentionFill" style="width: 0%"></div>
@@ -389,10 +388,11 @@
     </div>
   </section>
 
+  <!-- Stats -->
   <section class="stats">
     <div class="stat-card">
       <span class="stat-value" id="facesCount">0</span>
-      <div class="stat-label">Лиц</div>
+      <div class="stat-label">Людей</div>
     </div>
     <div class="stat-card">
       <span class="stat-value" id="engagedCount">0</span>
@@ -404,29 +404,26 @@
     </div>
   </section>
 
+  <!-- Chart -->
   <section class="chart-container">
     <div class="chart-title">📈 Динамика за последние 60 сек</div>
     <canvas id="attentionChart"></canvas>
   </section>
 
-  <div class="zone-legend">
-    <div class="legend-item"><div class="legend-color" style="background:hsl(0,70%,50%)"></div> Низкий</div>
-    <div class="legend-item"><div class="legend-color" style="background:hsl(60,70%,50%)"></div> Средний</div>
-    <div class="legend-item"><div class="legend-color" style="background:hsl(120,70%,50%)"></div> Высокий</div>
-    <div class="legend-item"><div class="legend-color" style="background:rgba(99,102,241,0.3);border-color:var(--primary)"></div> Зона</div>
-  </div>
-
+  <!-- Status -->
   <div class="status-bar">
     <span class="status-dot" id="statusDot"></span>
     <span id="statusText">Инициализация...</span>
   </div>
 
+  <!-- Mode Toggle -->
   <div class="mode-toggle">
     <button class="mode-btn active" data-mode="smart">🎯 Умный</button>
     <button class="mode-btn" data-mode="simple">⚡ Простой</button>
     <button class="mode-btn" data-mode="demo">🧪 Демо</button>
   </div>
 
+  <!-- Controls -->
   <section class="controls">
     <button class="btn secondary" id="switchCameraBtn">🔄 Сменить камеру</button>
     <button class="btn" id="startBtn" disabled>▶️ Начать анализ</button>
@@ -438,14 +435,21 @@
     </div>
   </section>
 
+  <!-- Footer -->
   <footer class="footer">
-    v3.0 • Зональный анализ • Все данные обрабатываются локально • 
+    v2.0 • Все данные обрабатываются локально в браузере • 
     <a href="#" id="debugToggle" style="color: var(--primary)">Debug</a>
   </footer>
   
   <div class="debug-console" id="debugConsole"></div>
 
+  <!-- Scripts -->
   <script type="module">
+    // ============================================
+    // SPEAKER EYE PRO - IMPROVED VERSION
+    // ============================================
+    
+    // Import MediaPipe Tasks Vision (modern API)
     import {
       FilesetResolver,
       FaceDetector,
@@ -454,28 +458,52 @@
 
     // ===== State Management =====
     const state = {
-      video: null, overlay: null, processCanvas: null, ctx: null, overlayCtx: null,
-      faceDetector: null, faceLandmarker: null, vision: null,
-      stream: null, camera: null, facingMode: 'user',
-      isRunning: false, isProcessing: false, lastFrameTime: 0, frameSkip: 3, frameCount: 0,
-      faces: [], engagedFaces: 0, attentionScore: 0, attentionHistory: [],
-      mode: 'smart', minFaceSize: 0.03, gazeThreshold: 25,
-      chartData: [], maxChartPoints: 60,
-      debug: false, logs: [],
-      faceTracks: new Map(),
-      lastProcessedTime: 0,
-      // Zone-based analytics
-      zones: [],
-      motionHistory: [],
-      lastFrameData: null,
-      zoneConfig: {
-        rows: 3,        // 3 horizontal rows: front/mid/back
-        cols: 4,        // 4 vertical columns = 12 zones total
-        minZoneFaces: 2, // Minimum faces to trust zone data
-        distantMotionThreshold: 0.8
-      }
+      // DOM Elements
+      video: null,
+      overlay: null,
+      processCanvas: null,
+      ctx: null,
+      overlayCtx: null,
+      chart: null,
+      
+      // MediaPipe
+      faceDetector: null,
+      faceLandmarker: null,
+      vision: null,
+      
+      // Camera
+      stream: null,
+      camera: null,
+      facingMode: 'user',
+      
+      // Processing
+      isRunning: false,
+      isProcessing: false,
+      lastFrameTime: 0,
+      frameSkip: 3, // Process every Nth frame for performance
+      frameCount: 0,
+      
+      // Detection Results
+      faces: [],
+      engagedFaces: 0,
+      attentionScore: 0,
+      attentionHistory: [],
+      
+      // Configuration
+      mode: 'smart', // smart | simple | demo
+      minFaceSize: 0.03, // Min face area ratio to consider
+      gazeThreshold: 25, // Max head yaw/pitch degrees to count as "looking"
+      
+      // UI
+      chartData: [],
+      maxChartPoints: 60,
+      
+      // Debug
+      debug: false,
+      logs: []
     };
 
+    // ===== Utilities =====
     const $ = id => document.getElementById(id);
     const log = (...args) => {
       const msg = `[${new Date().toLocaleTimeString()}] ${args.join(' ')}`;
@@ -491,6 +519,7 @@
     const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
     const lerp = (a, b, t) => a + (b - a) * t;
     
+    // Smooth value with exponential moving average
     let emaAttention = null;
     const smoothAttention = (value, alpha = 0.15) => {
       if (emaAttention === null) emaAttention = value;
@@ -498,43 +527,49 @@
       return emaAttention;
     };
 
-    // ===== Landmark Indices (MediaPipe Face Mesh) =====
-    const LANDMARKS = {
-      NOSE_TIP: 1, NOSE_BRIDGE: 6, FOREHEAD: 10,
-      LEFT_EYE: [33, 133, 160, 159],
-      RIGHT_EYE: [362, 263, 387, 386],
-      CHIN: 152, MOUTH_LEFT: 61, MOUTH_RIGHT: 291
-    };
-
     // ===== Initialization =====
     async function init() {
-      log('🚀 Initializing Speaker Eye Pro v3.0...');
+      log('🚀 Initializing Speaker Eye Pro...');
+      
+      // Cache DOM
       state.video = $('video');
       state.overlay = $('overlay');
       state.processCanvas = $('processCanvas');
       state.ctx = state.processCanvas.getContext('2d', { alpha: false });
       state.overlayCtx = state.overlay.getContext('2d');
       
+      // Setup canvas sizes
       resizeCanvases();
       window.addEventListener('resize', resizeCanvases);
+      
+      // Load MediaPipe models
       await loadModels();
+      
+      // Setup event listeners
       setupEventListeners();
+      
+      // Request camera
       await requestCamera();
       
+      // Hide loading screen
       $('loadingScreen').style.display = 'none';
-      updateStatus('ready', 'Готов к работе • Настройте камеру на аудиторию');
+      updateStatus('ready', 'Готов к работе • Покажите аудиторию');
+      
       log('✅ Initialization complete');
     }
 
     function resizeCanvases() {
       const wrapper = document.querySelector('.camera-wrapper');
-      const w = wrapper.clientWidth, h = wrapper.clientHeight;
-      state.overlay.width = w; state.overlay.height = h;
-      // Higher resolution for better distant detection
-      state.processCanvas.width = 960;
-      state.processCanvas.height = Math.round(960 * h / w);
-      // Reinitialize zones if already created
-      if (state.zones.length > 0) initZones();
+      const w = wrapper.clientWidth;
+      const h = wrapper.clientHeight;
+      
+      // Overlay canvas (display)
+      state.overlay.width = w;
+      state.overlay.height = h;
+      
+      // Process canvas (analysis) - lower res for performance
+      state.processCanvas.width = 640;
+      state.processCanvas.height = Math.round(640 * h / w);
     }
 
     // ===== MediaPipe Setup =====
@@ -547,6 +582,7 @@
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         );
         
+        // Face Detector - lightweight, fast
         state.faceDetector = await FaceDetector.createFromOptions(state.vision, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite'
@@ -556,28 +592,31 @@
           minSuppressionThreshold: 0.3
         });
         
+        // Face Landmarker - for head pose estimation [[7]]
         state.faceLandmarker = await FaceLandmarker.createFromOptions(state.vision, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
           },
           runningMode: 'VIDEO',
-          numFaces: 5,
+          numFaces: 5, // Limit for mobile performance
           minFaceDetectionConfidence: 0.5,
           minFacePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5
         });
         
         log('✅ Models loaded successfully');
+        
       } catch (err) {
         log('❌ Model loading error:', err);
         updateStatus('error', 'Не удалось загрузить AI • Используется демо-режим');
         state.mode = 'demo';
         $('loadingScreen').style.display = 'none';
         startDemoMode();
+        return;
       }
     }
 
-    // ===== Camera Setup — OPTIMIZED FOR DISTANCE =====
+    // ===== Camera Setup =====
     async function requestCamera() {
       log(`📷 Requesting ${state.facingMode === 'user' ? 'front' : 'rear'} camera...`);
       
@@ -585,33 +624,42 @@
         const constraints = {
           video: {
             facingMode: state.facingMode,
-            width: { ideal: 1920, min: 1280 },
-            height: { ideal: 1080, min: 720 },
-            frameRate: { ideal: 30, max: 30 },
-            focusMode: { ideal: 'continuous-video' }
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30, max: 30 }
           },
           audio: false
         };
         
         state.stream = await navigator.mediaDevices.getUserMedia(constraints);
         state.video.srcObject = state.stream;
+        
         await state.video.play();
         
+        // Get actual video dimensions
         const track = state.stream.getVideoTracks()[0];
         const settings = track.getSettings();
         $('cameraLabel').textContent = `${settings.facingMode === 'user' ? 'Фронтальная' : 'Основная'} • ${settings.width}×${settings.height}`;
         
+        // Start processing loop
         startProcessing();
+        
+        // Enable start button
         $('startBtn').disabled = false;
+        
         log(`✅ Camera ready: ${settings.width}×${settings.height} @ ${settings.frameRate}fps`);
+        
       } catch (err) {
         log('❌ Camera error:', err.name, err.message);
+        
+        // Try fallback camera
         if (state.facingMode === 'user') {
           state.facingMode = 'environment';
           log('🔄 Trying rear camera as fallback...');
           setTimeout(() => requestCamera(), 500);
           return;
         }
+        
         updateStatus('error', 'Камера недоступна • Проверьте разрешения');
         $('cameraLabel').textContent = '⚠️ Нет камеры';
       }
@@ -623,11 +671,15 @@
       
       const processFrame = async (timestamp) => {
         if (!state.isRunning) return;
+        
+        // Frame skipping for performance
         state.frameCount++;
         if (state.frameCount % state.frameSkip !== 0) {
           requestAnimationFrame(processFrame);
           return;
         }
+        
+        // Skip if already processing
         if (state.isProcessing) {
           requestAnimationFrame(processFrame);
           return;
@@ -635,14 +687,29 @@
         state.isProcessing = true;
         
         try {
-          state.ctx.drawImage(state.video, 0, 0, state.processCanvas.width, state.processCanvas.height);
+          // Draw video to process canvas
+          state.ctx.drawImage(
+            state.video,
+            0, 0,
+            state.processCanvas.width,
+            state.processCanvas.height
+          );
           
-          if (state.mode === 'demo') processDemoMode();
-          else if (state.mode === 'simple') await processSimpleMode();
-          else await processSmartMode();
+          // Run detection based on mode
+          if (state.mode === 'demo') {
+            processDemoMode();
+          } else if (state.mode === 'simple') {
+            await processSimpleMode();
+          } else {
+            await processSmartMode();
+          }
           
+          // Update UI
           updateUI();
+          
+          // Draw overlay
           drawOverlay();
+          
         } catch (err) {
           log('❌ Processing error:', err);
         } finally {
@@ -656,276 +723,116 @@
       log('🔄 Processing loop started');
     }
 
-    // ===== ZONE-BASED SMART MODE =====
+    // ===== Detection Modes =====
+    
+    // Smart Mode: Face Mesh + Head Pose Estimation [[2]][[7]]
     async function processSmartMode() {
-      const results = await state.faceLandmarker.detectForVideo(state.processCanvas, performance.now());
-      
-      // Initialize zones grid on first run
-      if (state.zones.length === 0) initZones();
+      const results = await state.faceLandmarker.detectForVideo(
+        state.processCanvas,
+        performance.now()
+      );
       
       state.faces = [];
       state.engagedFaces = 0;
       
-      // Reset zone counters
-      state.zones.forEach(z => {
-        z.detectedFaces = 0;
-        z.engagedFaces = 0;
-        z.motionEnergy = 0;
-      });
+      if (!results.faceLandmarks) return;
       
-      // Process detected faces (only reliable ones for individual analysis)
-      if (results.faceLandmarks) {
-        for (const landmarks of results.faceLandmarks) {
-          const faceSize = estimateFaceSize(landmarks, state.processCanvas.width);
-          
-          // Only use high-confidence faces (≥40px) for individual pose analysis
-          if (faceSize >= 40) {
-            const pose = estimateHeadPoseRobust(landmarks);
-            const zone = getZoneForLandmark(landmarks[0]);
-            
-            const face = {
-              bbox: landmarkToBbox(landmarks[0], faceSize),
-              pose: pose,
-              zone: zone.id,
-              reliable: true
-            };
-            
-            state.faces.push(face);
-            zone.detectedFaces++;
-            
-            // Engagement logic for close/reliable faces
-            if (Math.abs(pose.yaw) < 35 && pose.pitch > -25 && pose.pitch < 45) {
-              zone.engagedFaces++;
-              state.engagedFaces++;
-              face.engaged = true;
-            }
-          }
-        }
-      }
-      
-      // For distant zones (back rows): use motion analysis as engagement proxy
-      await analyzeZoneMotion();
-      
-      // Calculate zone-level and overall attention
-      calculateZoneAttention();
-      calculateOverallAttention();
-      
-      // Update UI with zone heatmap in debug mode
-      if (state.debug) drawZoneOverlay();
-    }
-
-    // Initialize zone grid (3 rows × 4 cols = 12 zones)
-    function initZones() {
-      const w = state.overlay.width, h = state.overlay.height;
-      const zoneW = w / state.zoneConfig.cols;
-      const zoneH = h / state.zoneConfig.rows;
-      
-      state.zones = [];
-      for (let row = 0; row < state.zoneConfig.rows; row++) {
-        for (let col = 0; col < state.zoneConfig.cols; col++) {
-          state.zones.push({
-            id: `${row}-${col}`,
-            row: row, col: col,
-            x: col * zoneW, y: row * zoneH,
-            width: zoneW, height: zoneH,
-            detectedFaces: 0,
-            engagedFaces: 0,
-            motionEnergy: 0,
-            attention: 50 // default neutral
-          });
-        }
-      }
-      log(`🗂️ Initialized ${state.zones.length} zones (${state.zoneConfig.rows}×${state.zoneConfig.cols})`);
-    }
-
-    // Get which zone a landmark belongs to
-    function getZoneForLandmark(landmark) {
-      const displayW = state.overlay.width;
-      const displayH = state.overlay.height;
-      const x = landmark.x * displayW;
-      const y = landmark.y * displayH;
-      
-      const col = Math.min(Math.floor(x / (displayW / state.zoneConfig.cols)), state.zoneConfig.cols - 1);
-      const row = Math.min(Math.floor(y / (displayH / state.zoneConfig.rows)), state.zoneConfig.rows - 1);
-      
-      return state.zones.find(z => z.row === row && z.col === col) || state.zones[0];
-    }
-
-    // Estimate face size in pixels from landmarks
-    function estimateFaceSize(landmarks, canvasWidth) {
-      const leftEye = landmarks[33], rightEye = landmarks[362];
-      if (!leftEye || !rightEye) return 0;
-      const eyeDistPx = Math.abs(rightEye.x - leftEye.x) * canvasWidth;
-      return eyeDistPx * 3; // Typical face is ~3x eye distance
-    }
-
-    // Convert landmark to display bbox
-    function landmarkToBbox(landmark, faceSizePx) {
       const displayW = state.overlay.width;
       const displayH = state.overlay.height;
       const processW = state.processCanvas.width;
+      const processH = state.processCanvas.height;
       
-      return {
-        x: landmark.x * displayW - faceSizePx * 0.5 * (displayW / processW),
-        y: landmark.y * displayH - faceSizePx * 0.6 * (displayH / state.processCanvas.height),
-        width: faceSizePx * (displayW / processW),
-        height: faceSizePx * 1.2 * (displayH / state.processCanvas.height)
-      };
+      const scaleX = displayW / processW;
+      const scaleY = displayH / processH;
+      
+      for (const landmarks of results.faceLandmarks) {
+        // Get key landmarks for head pose estimation
+        // Using nose tip, eyes, and chin for angle calculation
+        const noseTip = landmarks[4]; // Approximate nose tip
+        const leftEye = landmarks[33];
+        const rightEye = landmarks[263];
+        const chin = landmarks[152];
+        
+        if (!noseTip || !leftEye || !rightEye) continue;
+        
+        // Convert to display coordinates
+        const face = {
+          bbox: {
+            x: landmarks[0].x * displayW,
+            y: landmarks[0].y * displayH,
+            width: 100 * scaleX,
+            height: 120 * scaleY
+          },
+          // Estimate head pose using landmark geometry
+          pose: estimateHeadPose(leftEye, rightEye, noseTip, chin)
+        };
+        
+        state.faces.push(face);
+        
+        // Check if face is "looking at speaker"
+        // Criteria: face is reasonably large AND head is facing forward
+        const faceArea = face.bbox.width * face.bbox.height;
+        const frameArea = displayW * displayH;
+        const isLargeEnough = (faceArea / frameArea) > state.minFaceSize;
+        const isLookingForward = (
+          Math.abs(face.pose.yaw) < state.gazeThreshold &&
+          Math.abs(face.pose.pitch) < state.gazeThreshold
+        );
+        
+        if (isLargeEnough && isLookingForward) {
+          state.engagedFaces++;
+          face.engaged = true;
+        }
+      }
+      
+      // Calculate attention score
+      if (state.faces.length > 0) {
+        const ratio = (state.engagedFaces / state.faces.length) * 100;
+        state.attentionScore = smoothAttention(clamp(ratio, 0, 100));
+      } else {
+        state.attentionScore = smoothAttention(20); // Low default
+      }
     }
-
-    // Robust pose estimation with fallback
-    function estimateHeadPoseRobust(landmarks) {
-      const nose = getLandmarkCenter(landmarks, [LANDMARKS.NOSE_TIP, 4, 5, LANDMARKS.NOSE_BRIDGE]);
-      const leftEye = getLandmarkCenter(landmarks, LANDMARKS.LEFT_EYE);
-      const rightEye = getLandmarkCenter(landmarks, LANDMARKS.RIGHT_EYE);
-      const chin = landmarks[LANDMARKS.CHIN];
-      const forehead = landmarks[LANDMARKS.FOREHEAD];
-      
-      if (!nose || !leftEye || !rightEye) return { yaw: 0, pitch: 0, reliable: false };
-      
+    
+    // Simplified head pose estimation using landmark geometry [[1]][[3]]
+    function estimateHeadPose(leftEye, rightEye, noseTip, chin) {
+      // Yaw (left/right turn): based on eye symmetry and nose position
       const eyeMidX = (leftEye.x + rightEye.x) / 2;
-      const yaw = ((nose.x - eyeMidX) / (Math.abs(rightEye.x - leftEye.x) || 0.01)) * 55;
+      const noseToEyeMid = noseTip.x - eyeMidX;
+      const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+      const yaw = (noseToEyeMid / eyeDistance) * 60; // Approximate degrees
       
-      const faceHeight = chin.y - forehead.y;
-      const pitch = faceHeight ? ((nose.y - forehead.y) / faceHeight - 0.42) * 90 : 0;
+      // Pitch (up/down): based on nose-to-chin vertical distance
+      const noseToChin = chin.y - noseTip.y;
+      // Reference: neutral pitch has noseToChin ≈ 0.15-0.2 in normalized coords
+      const pitch = ((noseToChin - 0.17) / 0.1) * 45;
       
       return {
         yaw: clamp(yaw, -90, 90),
-        pitch: clamp(pitch, -45, 45),
-        reliable: true
+        pitch: clamp(pitch, -45, 45)
       };
     }
-
-    // Helper: average multiple landmarks for stability
-    function getLandmarkCenter(landmarks, indices) {
-      const valid = (Array.isArray(indices) ? indices : [indices])
-        .map(i => landmarks[i])
-        .filter(l => l && typeof l.x === 'number');
-      if (valid.length === 0) return null;
-      const sum = valid.reduce((acc, l) => ({ x: acc.x + l.x, y: acc.y + l.y }), { x: 0, y: 0 });
-      return { x: sum.x / valid.length, y: sum.y / valid.length };
-    }
-
-    // Motion analysis for distant zones (optical flow approximation)
-    async function analyzeZoneMotion() {
-      if (!state.lastFrameData) {
-        state.lastFrameData = state.ctx.getImageData(0, 0, state.processCanvas.width, state.processCanvas.height);
-        return;
-      }
-      
-      const current = state.ctx.getImageData(0, 0, state.processCanvas.width, state.processCanvas.height);
-      const last = state.lastFrameData;
-      
-      // Process each zone (only back rows use motion)
-      for (const zone of state.zones) {
-        if (zone.row < 2) continue; // Front/mid rows use face detection
-        
-        let motionSum = 0, pixelCount = 0;
-        const sampleStep = 4; // Sample every 4th pixel for performance
-        
-        for (let y = Math.floor(zone.y * state.processCanvas.height / state.overlay.height); 
-             y < Math.floor((zone.y + zone.height) * state.processCanvas.height / state.overlay.height); 
-             y += sampleStep) {
-          for (let x = Math.floor(zone.x * state.processCanvas.width / state.overlay.width); 
-               x < Math.floor((zone.x + zone.width) * state.processCanvas.width / state.overlay.width); 
-               x += sampleStep) {
-            
-            const idx = (y * state.processCanvas.width + x) * 4;
-            const diff = Math.abs(current.data[idx] - last.data[idx]) +
-                        Math.abs(current.data[idx+1] - last.data[idx+1]) +
-                        Math.abs(current.data[idx+2] - last.data[idx+2]);
-            
-            if (diff > 30) { // Threshold for "motion"
-              motionSum += diff;
-              pixelCount++;
-            }
-          }
-        }
-        
-        // Normalize motion energy (0-100)
-        zone.motionEnergy = pixelCount > 0 ? clamp((motionSum / pixelCount) * 2, 0, 100) : 0;
-      }
-      
-      state.lastFrameData = current;
-    }
-
-    // Calculate attention per zone
-    function calculateZoneAttention() {
-      for (const zone of state.zones) {
-        if (zone.row < 2) {
-          // Front/mid rows: use face detection data
-          if (zone.detectedFaces >= state.zoneConfig.minZoneFaces) {
-            zone.attention = clamp((zone.engagedFaces / zone.detectedFaces) * 100, 0, 100);
-          } else {
-            zone.attention = 50; // uncertain with few faces
-          }
-        } else {
-          // Back rows: use motion as proxy
-          // Moderate motion = engaged (nodding, looking), too much = distracted
-          const motionScore = zone.motionEnergy;
-          zone.attention = clamp(
-            30 + (motionScore > 50 ? (100 - motionScore) * 0.7 : motionScore * 0.7),
-            10, 90
-          );
-        }
-      }
-    }
-
-    // Overall attention: weighted average (front rows count more)
-    function calculateOverallAttention() {
-      let totalWeight = 0, weightedSum = 0;
-      
-      for (const zone of state.zones) {
-        // Weight: front rows = 3x, mid = 2x, back = 1x
-        const weight = 3 - zone.row;
-        weightedSum += zone.attention * weight;
-        totalWeight += weight;
-      }
-      
-      const rawScore = totalWeight > 0 ? weightedSum / totalWeight : 50;
-      state.attentionScore = smoothAttention(clamp(rawScore, 0, 100));
-    }
-
-    // Draw zone heatmap overlay (debug mode)
-    function drawZoneOverlay() {
-      const ctx = state.overlayCtx;
-      
-      for (const zone of state.zones) {
-        // Color by attention level (red→yellow→green)
-        const hue = (zone.attention / 100) * 120;
-        ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.15)`;
-        ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
-        
-        // Border
-        ctx.strokeStyle = `hsl(${hue}, 70%, 60%)`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(zone.x, zone.y, zone.width, zone.height);
-        
-        // Label (debug info)
-        if (state.debug) {
-          ctx.fillStyle = '#fff';
-          ctx.font = '10px monospace';
-          ctx.fillText(
-            `${Math.round(zone.attention)}% • ${zone.detectedFaces}f`,
-            zone.x + 4,
-            zone.y + 14
-          );
-        }
-      }
-    }
-
-    // ===== Simple Mode (face detection only) =====
+    
+    // Simple Mode: Face detection only (faster, less accurate)
     async function processSimpleMode() {
-      const results = await state.faceDetector.detectForVideo(state.processCanvas, performance.now());
+      const results = await state.faceDetector.detectForVideo(
+        state.processCanvas,
+        performance.now()
+      );
+      
       state.faces = [];
       state.engagedFaces = 0;
+      
       if (!results.detections) return;
       
-      const displayW = state.overlay.width, displayH = state.overlay.height;
+      const displayW = state.overlay.width;
+      const displayH = state.overlay.height;
       const processW = state.processCanvas.width;
       
       for (const detection of results.detections) {
         const bbox = detection.boundingBox;
+        
+        // Convert to display coordinates
         const face = {
           bbox: {
             x: bbox.originX * (displayW / processW),
@@ -935,15 +842,20 @@
           },
           confidence: detection.categories[0]?.score || 0
         };
+        
         state.faces.push(face);
+        
+        // Simple heuristic: larger faces = more likely engaged
         const faceArea = face.bbox.width * face.bbox.height;
         const frameArea = displayW * displayH;
+        
         if ((faceArea / frameArea) > state.minFaceSize && face.confidence > 0.7) {
           state.engagedFaces++;
           face.engaged = true;
         }
       }
       
+      // Calculate attention
       if (state.faces.length > 0) {
         const ratio = (state.engagedFaces / state.faces.length) * 100;
         state.attentionScore = smoothAttention(clamp(ratio, 0, 100));
@@ -951,50 +863,37 @@
         state.attentionScore = smoothAttention(25);
       }
     }
-
-    // ===== Demo Mode (simulation) =====
+    
+    // Demo Mode: Simulated data for testing without camera/models
     function processDemoMode() {
-      if (state.zones.length === 0) initZones();
-      
+      // Simulate varying audience engagement
       const time = Date.now() / 1000;
       const baseEngagement = 60 + Math.sin(time * 0.3) * 20;
       const noise = (Math.random() - 0.5) * 15;
-      state.attentionScore = smoothAttention(clamp(baseEngagement + noise, 10, 95));
       
+      state.attentionScore = smoothAttention(clamp(baseEngagement + noise, 10, 95));
       state.faces = [];
       state.engagedFaces = 0;
       
-      // Generate fake faces distributed across zones
-      const faceCount = Math.floor(Math.random() * 8) + 4;
+      // Generate fake faces for visualization
+      const faceCount = Math.floor(Math.random() * 4) + 2;
       for (let i = 0; i < faceCount; i++) {
-        const zone = state.zones[Math.floor(Math.random() * state.zones.length)];
         const engaged = Math.random() > 0.4;
-        
         state.faces.push({
           bbox: {
-            x: zone.x + Math.random() * zone.width * 0.8,
-            y: zone.y + Math.random() * zone.height * 0.8,
-            width: 40 + Math.random() * 30,
-            height: 50 + Math.random() * 40
+            x: 50 + Math.random() * (state.overlay.width - 150),
+            y: 80 + Math.random() * (state.overlay.height - 200),
+            width: 60 + Math.random() * 30,
+            height: 75 + Math.random() * 35
           },
           engaged: engaged,
-          zone: zone.id,
-          pose: { yaw: (Math.random() - 0.5) * 60, pitch: (Math.random() - 0.5) * 30 }
+          pose: {
+            yaw: (Math.random() - 0.5) * 60,
+            pitch: (Math.random() - 0.5) * 30
+          }
         });
-        
-        if (engaged) {
-          state.engagedFaces++;
-          zone.engagedFaces++;
-        }
-        zone.detectedFaces++;
+        if (engaged) state.engagedFaces++;
       }
-      
-      // Update zone attention for visualization
-      state.zones.forEach(z => {
-        if (z.detectedFaces > 0) {
-          z.attention = clamp((z.engagedFaces / z.detectedFaces) * 100, 0, 100);
-        }
-      });
     }
 
     // ===== Visualization =====
@@ -1002,111 +901,138 @@
       const ctx = state.overlayCtx;
       ctx.clearRect(0, 0, state.overlay.width, state.overlay.height);
       
-      // Draw face boxes for detected faces
+      // Draw face boxes
       for (const face of state.faces) {
-        if (!face.reliable) continue; // Only draw reliable detections
-        
         const { x, y, width, height } = face.bbox;
+        
+        // Box style based on engagement
         ctx.strokeStyle = face.engaged ? '#22c55e' : '#ef4444';
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, width, height);
+        
+        // Subtle fill
         ctx.fillStyle = face.engaged ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
         ctx.fillRect(x, y, width, height);
         
-        if (state.debug && face.pose) {
+        // Label
+        if (state.debug) {
           ctx.fillStyle = '#fff';
-          ctx.font = '10px monospace';
-          ctx.fillText(face.engaged ? '✓' : '✗', x + 4, y + 14);
-          ctx.fillText(`Y:${face.pose.yaw.toFixed(1)}° P:${face.pose.pitch.toFixed(1)}°`, x + 4, y + height + 12);
+          ctx.font = '11px monospace';
+          ctx.fillText(
+            face.engaged ? '✓' : '✗',
+            x + 4,
+            y + 14
+          );
+          
+          if (face.pose) {
+            ctx.fillText(
+              `Y:${Math.round(face.pose.yaw)}° P:${Math.round(face.pose.pitch)}°`,
+              x + 4,
+              y + height + 12
+            );
+          }
         }
-      }
-      
-      // Draw zone grid in debug mode (even without faces)
-      if (state.debug && state.zones.length > 0) {
-        ctx.strokeStyle = 'rgba(99,102,241,0.5)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 3]);
-        for (const zone of state.zones) {
-          ctx.strokeRect(zone.x, zone.y, zone.width, zone.height);
-        }
-        ctx.setLineDash([]);
-      }
-      
-      // Debug info panel
-      if (state.debug && state.faces.length > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.85)';
-        ctx.fillRect(10, 10, 240, 90);
-        ctx.fillStyle = '#fff';
-        ctx.font = '11px monospace';
-        const f = state.faces[0];
-        ctx.fillText(`MODE: ${state.mode.toUpperCase()}`, 15, 25);
-        ctx.fillText(`YAW: ${f.pose.yaw.toFixed(1)}°  PITCH: ${f.pose.pitch.toFixed(1)}°`, 15, 42);
-        ctx.fillText(`ZONE: ${f.zone}  SIZE: ${Math.round(f.bbox.width)}px`, 15, 59);
-        ctx.fillText(`ENGAGED: ${f.engaged ? 'YES' : 'NO'}  SCORE: ${Math.round(state.attentionScore)}%`, 15, 76);
-        ctx.fillText(`ZONES: ${state.zones.filter(z=>z.attention>70).length}/12 high`, 15, 93);
       }
     }
 
-    // ===== UI Updates =====
     function updateUI() {
+      // Attention value
       const attEl = $('attentionValue');
       const rounded = Math.round(state.attentionScore);
       attEl.textContent = rounded;
-      attEl.className = `attention-value ${rounded >= 70 ? 'good' : rounded >= 45 ? 'medium' : 'bad'}`;
+      attEl.className = `attention-value ${
+        rounded >= 70 ? 'good' : rounded >= 45 ? 'medium' : 'bad'
+      }`;
+      
+      // Progress bar
       $('attentionFill').style.width = `${rounded}%`;
-      $('facesCount').textContent = state.faces.filter(f => f.reliable).length;
+      
+      // Stats
+      $('facesCount').textContent = state.faces.length;
       $('engagedCount').textContent = state.engagedFaces;
       $('fpsCount').textContent = Math.round(30 / state.frameSkip);
+      
+      // Update chart
       updateChart(rounded);
     }
 
+    // Simple canvas-based chart
     function updateChart(value) {
       const canvas = $('attentionChart');
       const ctx = canvas.getContext('2d');
       const w = canvas.width = canvas.offsetWidth * 2;
       const h = canvas.height = canvas.offsetHeight * 2;
-      state.chartData.push(value);
-      if (state.chartData.length > state.maxChartPoints) state.chartData.shift();
       
+      // Add to history
+      state.chartData.push(value);
+      if (state.chartData.length > state.maxChartPoints) {
+        state.chartData.shift();
+      }
+      
+      // Clear
       ctx.clearRect(0, 0, w, h);
+      
+      // Grid
       ctx.strokeStyle = 'rgba(255,255,255,0.1)';
       ctx.lineWidth = 1;
       for (let i = 0; i <= 4; i++) {
         const y = (h / 4) * i;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
       }
       
+      // Line
       ctx.strokeStyle = '#6366f1';
       ctx.lineWidth = 3;
       ctx.lineJoin = 'round';
       ctx.beginPath();
+      
       const stepX = w / (state.maxChartPoints - 1);
+      
       for (let i = 0; i < state.chartData.length; i++) {
-        const x = i * stepX, y = h - (state.chartData[i] / 100) * h;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        const x = i * stepX;
+        const y = h - (state.chartData[i] / 100) * h;
+        
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
       ctx.stroke();
-      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+      
+      // Fill under line
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
       ctx.fillStyle = 'rgba(99,102,241,0.1)';
       ctx.fill();
     }
 
-    function updateStatus(s, message) {
-      $('statusDot').className = `status-dot ${s}`;
-      $('statusText').textContent = message;
+    // ===== UI Helpers =====
+    function updateStatus(state, message) {
+      const dot = $('statusDot');
+      const text = $('statusText');
+      
+      dot.className = `status-dot ${state}`;
+      text.textContent = message;
     }
 
-    // ===== Event Listeners =====
     function setupEventListeners() {
+      // Camera switch
       $('switchCameraBtn').onclick = async () => {
         log('🔄 Switching camera...');
         state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
-        if (state.stream) state.stream.getTracks().forEach(t => t.stop());
-        state.faceTracks.clear(); // Reset tracking on camera switch
+        
+        // Stop current stream
+        if (state.stream) {
+          state.stream.getTracks().forEach(t => t.stop());
+        }
+        
         $('cameraLabel').textContent = 'Переключение...';
         await requestCamera();
       };
       
+      // Start/Stop analysis
       $('startBtn').onclick = () => {
         state.isRunning = true;
         $('startBtn').style.display = 'none';
@@ -1124,29 +1050,25 @@
         log('⏹️ Analysis stopped');
       };
       
+      // Mode selection
       document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.onclick = () => {
           document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           state.mode = btn.dataset.mode;
           log(`🔄 Mode changed: ${state.mode}`);
+          
+          // Adjust frame skip for performance
           state.frameSkip = state.mode === 'smart' ? 3 : 2;
-          // Reset zones on mode change for clean state
-          if (state.mode !== 'demo') state.zones = [];
         };
       });
       
+      // Export report
       $('exportBtn').onclick = () => {
         const email = $('emailInput').value;
-        const avg = state.chartData.length > 0 ? Math.round(state.chartData.reduce((a,b) => a+b) / state.chartData.length) : 0;
-        
-        // Include zone data in report
-        const zoneData = state.zones.map(z => ({
-          id: z.id, row: z.row, col: z.col,
-          attention: Math.round(z.attention),
-          faces: z.detectedFaces,
-          engaged: z.engagedFaces
-        }));
+        const avg = state.chartData.length > 0 
+          ? Math.round(state.chartData.reduce((a,b) => a+b) / state.chartData.length)
+          : 0;
         
         const report = {
           timestamp: new Date().toISOString(),
@@ -1155,22 +1077,27 @@
             current: Math.round(state.attentionScore),
             average: avg,
             peak: Math.max(...state.chartData),
-            duration: state.chartData.length,
-            facesDetected: state.faces.filter(f => f.reliable).length,
-            engagedCount: state.engagedFaces
+            duration: state.chartData.length // seconds
           },
-          zones: zoneData,
-          settings: { mode: state.mode, camera: state.facingMode, zoneConfig: state.zoneConfig }
+          settings: {
+            mode: state.mode,
+            camera: state.facingMode
+          }
         };
         
+        // Download as JSON
         const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `speaker_eye_report_${Date.now()}.json`; a.click();
+        a.href = url;
+        a.download = `speaker_eye_report_${Date.now()}.json`;
+        a.click();
         URL.revokeObjectURL(url);
-        log('📊 Report exported with zone data');
+        
+        log('📊 Report exported');
       };
       
+      // Debug toggle
       $('debugToggle').onclick = (e) => {
         e.preventDefault();
         state.debug = !state.debug;
@@ -1178,31 +1105,38 @@
         log(`🔧 Debug ${state.debug ? 'enabled' : 'disabled'}`);
       };
       
-      // Enable export when we have meaningful data
+      // Enable export when we have data
       const observer = new MutationObserver(() => {
-        $('exportBtn').disabled = state.chartData.length < 10 || state.mode === 'demo';
+        $('exportBtn').disabled = state.chartData.length < 10;
       });
       observer.observe($('attentionValue'), { childList: true });
     }
 
+    // ===== Demo Mode Fallback =====
     function startDemoMode() {
       log('🧪 Starting demo mode...');
       state.mode = 'demo';
       document.querySelector('[data-mode="demo"]').classList.add('active');
-      initZones(); // Initialize zones for demo visualization
+      
+      // Start processing loop anyway
       startProcessing();
+      
+      // Enable buttons
       $('startBtn').disabled = false;
-      $('exportBtn').disabled = true; // Disable export in pure demo
+      $('exportBtn').disabled = false;
     }
 
     // ===== Cleanup =====
     window.addEventListener('beforeunload', () => {
-      if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+      if (state.stream) {
+        state.stream.getTracks().forEach(t => t.stop());
+      }
       if (state.faceDetector) state.faceDetector.close();
       if (state.faceLandmarker) state.faceLandmarker.close();
       log('👋 Cleanup complete');
     });
 
+    // Handle page visibility (save battery)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         log('⏸️ Page hidden - pausing processing');
@@ -1213,9 +1147,13 @@
       }
     });
 
-    log('📋 Speaker Eye Pro v3.0 loaded • Zone-based analytics enabled');
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+    // ===== Start =====
+    log('📋 Speaker Eye Pro loaded');
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
