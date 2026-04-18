@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Speaker Eye - Final</title>
+    <title>Speaker Eye</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #0a0a0a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; }
@@ -83,12 +83,13 @@
     <button id="sendReportBtn">📧 Send Report</button>
     
     <div class="footer">
-        Using MediaPipe • Back camera only • Works on modern browsers
+        Using MediaPipe • Back camera only
     </div>
 
     <script>
         // ============================================
-        // ФИНАЛЬНАЯ ВЕРСИЯ - ТОЛЬКО ЗАДНЯЯ КАМЕРА
+        // ПРИНУДИТЕЛЬНЫЙ ВЫБОР ЗАДНЕЙ КАМЕРЫ
+        // Перебираем устройства и выбираем заднюю
         // ============================================
         
         let video = document.getElementById('video');
@@ -135,7 +136,7 @@
             faceDetection.onResults(onFaceResults);
             
             status.innerHTML = '✅ Model ready!';
-            debug.innerHTML = 'Face detection active - point camera at audience';
+            debug.innerHTML = 'Face detection active - selecting back camera...';
             isModelReady = true;
             
             return true;
@@ -220,17 +221,48 @@
             document.getElementById('looking').textContent = lookingFaces;
         }
         
-        // Запуск камеры - ТОЛЬКО ЗАДНЯЯ
+        // ПРИНУДИТЕЛЬНЫЙ ВЫБОР ЗАДНЕЙ КАМЕРЫ
+        async function getBackCamera() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            
+            // Ищем заднюю камеру
+            let backCamera = null;
+            for (const device of videoDevices) {
+                // На iOS задняя камера обычно содержит "back" в label
+                if (device.label.toLowerCase().includes('back') || 
+                    device.label.toLowerCase().includes('rear') ||
+                    device.label.toLowerCase().includes('environment')) {
+                    backCamera = device;
+                    break;
+                }
+            }
+            
+            // Если нашли заднюю - используем её deviceId
+            if (backCamera) {
+                return { deviceId: { exact: backCamera.deviceId } };
+            }
+            
+            // Если не нашли - пробуем facingMode environment
+            return { facingMode: { exact: "environment" } };
+        }
+        
+        // Запуск камеры с принудительным выбором задней
         async function startCamera() {
             const debug = document.getElementById('debug');
             
             try {
+                // Сначала запрашиваем разрешение (чтобы получить labels)
+                let tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                tempStream.getTracks().forEach(track => track.stop());
+                
+                // Получаем список камер с labels
+                const constraints = await getBackCamera();
+                
+                debug.innerHTML = 'Requesting back camera...';
+                
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: { exact: "environment" },
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
-                    }
+                    video: constraints
                 });
                 
                 cameraStream = stream;
@@ -238,7 +270,9 @@
                 await new Promise((resolve) => { video.onloadedmetadata = resolve; });
                 await video.play();
                 
-                debug.innerHTML = 'Back camera active, processing audience...';
+                // Определяем какая камера активна
+                const track = stream.getVideoTracks()[0];
+                debug.innerHTML = `✅ Camera: ${track.label} (BACK camera active)`;
                 
                 mediaPipeCamera = new Camera(video, {
                     onFrame: async () => {
@@ -256,23 +290,7 @@
                 
             } catch (err) {
                 debug.innerHTML = 'Back camera error: ' + err.message;
-                
-                // Пробуем без exact
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: {
-                            facingMode: "environment",
-                            width: { ideal: 640 },
-                            height: { ideal: 480 }
-                        }
-                    });
-                    cameraStream = stream;
-                    video.srcObject = stream;
-                    await video.play();
-                    debug.innerHTML = 'Back camera active (fallback mode)';
-                } catch (fallbackErr) {
-                    debug.innerHTML = 'Camera error: ' + fallbackErr.message;
-                }
+                document.getElementById('status').innerHTML = '❌ Back camera required';
             }
         }
         
