@@ -80,7 +80,7 @@ preds.forEach(p=>{
 if(p.class==="person"){
 people++;
 
-const area = p.bbox[2]p.bbox[3];
+const area = p.bbox[2]*p.bbox[3];
 const normalized = area / (640480);
 
 // closer = more engaged
