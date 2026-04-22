@@ -40,6 +40,9 @@ button{padding:10px;margin:4px;border:none;border-radius:10px;background:#6366f1
 </div>
 
 <script>
+const start = document.getElementById("start");
+const switchBtn = document.getElementById("switch");
+  
 const state = {
 video:null,
 stream:null,
@@ -81,7 +84,7 @@ if(p.class==="person"){
 people++;
 
 const area = p.bbox[2]*p.bbox[3];
-const normalized = area / (640480);
+const normalized = area / (640*480);
 
 // closer = more engaged
 if(normalized > 0.08){
@@ -143,7 +146,7 @@ state.running = true;
 };
 
 // SWITCH CAMERA
-switch.onclick = async ()=>{
+switchBtn.onclick = async ()=>{
 state.facing = state.facing==="user"?"environment":"user";
 await startCamera();
 };
