@@ -203,7 +203,7 @@ function processDemo(){
 // ===== PREPROCESS =====
 function preprocess(img){
   const data = img.data;
-  const float = new Float32Array(3img*widthimg*height);
+  const float = new Float32Array(3*img.width*img.height);
 
   for(let i=0;i<img.widthimg.height;i++){
     float[i] = data[i4]/255;
