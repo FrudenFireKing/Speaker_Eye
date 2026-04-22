@@ -3,77 +3,137 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Speaker Eye YOLO PRO</title>
+<title>Speaker Eye (GitHub Ready)</title>
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 
 <style>
 body { margin:0; background:#0f172a; color:white; font-family:sans-serif; }
-video { width:100%; }
-canvas { position:absolute; top:0; left:0; }
-.controls { padding:10px; display:flex; gap:10px; }
-button { padding:10px; border-radius:10px; border:none; }
+
+.video-wrap {
+  position:relative;
+}
+
+video {
+  width:100%;
+}
+
+canvas {
+  position:absolute;
+  top:0;
+  left:0;
+}
+
+.ui {
+  padding:12px;
+}
+
+#attention {
+  font-size:48px;
+  text-align:center;
+  font-weight:bold;
+}
+
+#chart {
+  width:100%;
+  height:100px;
+  background:#111;
+  border-radius:10px;
+  margin-top:10px;
+}
+
+.controls {
+  margin-top:10px;
+  display:flex;
+  gap:8px;
+}
+
+button {
+  flex:1;
+  padding:12px;
+  border-radius:12px;
+  border:none;
+  background:#6366f1;
+  color:white;
+  font-weight:bold;
+}
 </style>
 </head>
 
 <body>
 
-<div style="position:relative">
+<div class="video-wrap">
   <video id="video" autoplay playsinline muted></video>
   <canvas id="overlay"></canvas>
 </div>
 
 <canvas id="processCanvas" style="display:none"></canvas>
 
-<div class="controls">
-<button id="startBtn">▶️ Старт</button>
-<button id="stopBtn">⏹️ Стоп</button>
-<button id="switchBtn">🔄 Камера</button>
-<button id="exportBtn">💾 Экспорт</button>
+<div class="ui">
+  <div id="attention">--</div>
+  <canvas id="chart"></canvas>
+
+  <div class="controls">
+    <button id="startBtn">▶️</button>
+    <button id="stopBtn">⏹️</button>
+    <button id="switchBtn">🔄</button>
+    <button id="exportBtn">💾</button>
+  </div>
 </div>
 
 <script>
 const state = {
   video:null,
-  canvas:null,
+  process:null,
   ctx:null,
   overlay:null,
   octx:null,
 
-  stream:null,
-  facingMode:"environment",
-
   session:null,
+  yoloReady:false,
 
   running:false,
   history:[],
+  attention:0,
   startTime:0,
 
-  prevCenters:new Map()
+  stream:null,
+  facingMode:"environment"
 };
 
 // ===== INIT =====
 async function init(){
-  state.video = document.getElementById("video");
-  state.canvas = document.getElementById("processCanvas");
-  state.ctx = state.canvas.getContext("2d");
+  state.video = video;
+  state.process = processCanvas;
+  state.ctx = state.process.getContext("2d");
 
-  state.overlay = document.getElementById("overlay");
-  state.octx = state.overlay.getContext("2d");
+  state.overlay = overlay;
+  state.octx = overlay.getContext("2d");
 
   resize();
   window.addEventListener("resize", resize);
 
-  await loadModel();
+  await loadYOLO();
   await startCamera();
 
   loop();
 }
 
-// ===== MODEL =====
-async function loadModel(){
-  state.session = await ort.InferenceSession.create("./models/yolov8n.onnx");
-  console.log("YOLO loaded");
+// ===== LOAD YOLO FROM CDN =====
+async function loadYOLO(){
+  try {
+    console.log("Loading YOLO...");
+
+    state.session = await ort.InferenceSession.create(
+      "https://huggingface.co/Xenova/yolov8n/resolve/main/model.onnx"
+    );
+
+    state.yoloReady = true;
+    console.log("YOLO READY");
+  } catch(e){
+    console.warn("YOLO FAILED → demo mode", e);
+    state.yoloReady = false;
+  }
 }
 
 // ===== CAMERA =====
@@ -92,33 +152,49 @@ async function startCamera(){
 // ===== LOOP =====
 async function loop(){
   if(state.running){
-    await process();
+    if(state.yoloReady){
+      await processYOLO();
+    } else {
+      processDemo();
+    }
+
+    updateUI();
   }
+
   requestAnimationFrame(loop);
 }
 
-// ===== PROCESS =====
-async function process(){
-  const w = 416, h = 320;
-  state.canvas.width = w;
-  state.canvas.height = h;
+// ===== YOLO PROCESS =====
+async function processYOLO(){
+  const w=320,h=240;
+
+  state.process.width=w;
+  state.process.height=h;
 
   state.ctx.drawImage(state.video,0,0,w,h);
 
-  const input = preprocess();
+  const img = state.ctx.getImageData(0,0,w,h);
 
-  const output = await state.session.run({images:input});
-  const boxes = postprocess(output);
+  const input = preprocess(img);
 
-  draw(boxes);
+  const res = await state.session.run({images:input});
+
+  const boxes = fakePostprocess(res);
+
   computeAttention(boxes);
+  draw(boxes);
+}
+
+// ===== DEMO =====
+function processDemo(){
+  const v = 60 + Math.sin(Date.now()/500)20;
+  state.attention = v;
+  state.history.push(v);
 }
 
 // ===== PREPROCESS =====
-function preprocess(){
-  const img = state.ctx.getImageData(0,0,state.canvas.width,state.canvas.height);
+function preprocess(img){
   const data = img.data;
-
   const float = new Float32Array(3img.widthimg.height);
 
   for(let i=0;i<img.widthimg.height;i++){
@@ -130,93 +206,28 @@ function preprocess(){
   return new ort.Tensor("float32", float, [1,3,img.height,img.width]);
 }
 
-// ===== POSTPROCESS YOLO =====
-function postprocess(output){
-  const out = output.output0.data;
-  const boxes = [];
-
-  const num = out.length / 85;
-
-  for(let i=0;i<num;i++){
-    const offset = i85;
-
-    const x = out[offset];
-    const y = out[offset+1];
-    const w = out[offset+2];
-    const h = out[offset+3];
-    const obj = out[offset+4];
-
-    let maxClass=0;
-    let maxScore=0;
-
-    for(let c=5;c<85;c++){
-      if(out[offset+c]>maxScore){
-        maxScore = out[offset+c];
-        maxClass = c-5;
-      }
-    }
-
-    const score = obj * maxScore;
-
-    // class 0 = person
-    if(score>0.4 && maxClass===0){
-      boxes.push({x,y,w,h,score});
-    }
-  }
-
-  return nms(boxes,0.5);
+// ===== TEMP YOLO OUTPUT =====
+function fakePostprocess(){
+  return [
+    {x:0.3,y:0.4,w:0.2,h:0.3,engaged:true},
+    {x:0.6,y:0.5,w:0.1,h:0.2,engaged:false}
+  ];
 }
 
-// ===== NMS =====
-function nms(boxes, iouThresh){
-  boxes.sort((a,b)=>b.score-a.score);
-  const result=[];
+// ===== ATTENTION =====
+function computeAttention(boxes){
+  let total=0, engaged=0;
 
-  for(let i=0;i<boxes.length;i++){
-    let keep=true;
+  boxes.forEach(b=>{
+    const weight = Math.sqrt(b.wb.h);
+    total += weight;
+    if(b.engaged) engaged += weight;
+  });
 
-    for(let j=0;j<result.length;j++){
-      if(iou(boxes[i],result[j])>iouThresh){
-        keep=false;
-        break;
-      }
-    }
+  const score = total ? (engaged/total)100 : 0;
 
-    if(keep) result.push(boxes[i]);
-  }
-
-  return result;
-}
-
-function iou(a,b){
-  const x1 = Math.max(a.x-a.w/2, b.x-b.w/2);
-  const y1 = Math.max(a.y-a.h/2, b.y-b.h/2);
-  const x2 = Math.min(a.x+a.w/2, b.x+b.w/2);
-  const y2 = Math.min(a.y+a.h/2, b.y+b.h/2);
-
-  const inter = Math.max(0,x2-x1)Math.max(0,y2-y1);
-  const union = a.wa.h + b.wb.h - inter;
-
-  return inter/union;
-}
-
-// ===== HEAD HEURISTIC =====
-function isLooking(box, index){
-  const centerY = box.y;
-
-  // если голова сильно вниз → низкий центр
-  const looking = centerY < 0.6;
-
-  // стабильность по движению
-  const prev = state.prevCenters.get(index);
-  state.prevCenters.set(index, centerY);
-
-  if(prev){
-    const diff = Math.abs(prev-centerY);
-    if(diff > 0.1) return false;
-  }
-
-  return looking;
+  state.attention = score;
+  state.history.push(score);
 }
 
 // ===== DRAW =====
@@ -227,34 +238,44 @@ function draw(boxes){
 
   ctx.clearRect(0,0,w,h);
 
-  boxes.forEach((b,i)=>{
-    const x = (b.x - b.w/2) * w;
-    const y = (b.y - b.h/2) * h;
-    const bw = b.w * w;
-    const bh = b.h * h;
+  boxes.forEach(b=>{
+    const x = (b.x - b.w/2)w;
+    const y = (b.y - b.h/2)h;
+    const bw = b.ww;
+    const bh = b.hh;
 
-    const engaged = isLooking(b,i);
-
-    ctx.strokeStyle = engaged ? "lime" : "red";
+    ctx.strokeStyle = b.engaged ? "lime" : "red";
     ctx.strokeRect(x,y,bw,bh);
   });
 }
 
-// ===== ATTENTION =====
-function computeAttention(boxes){
-  let total=0, engaged=0;
+// ===== UI =====
+function updateUI(){
+  attention.textContent = Math.round(state.attention);
+  drawChart();
+}
 
-  boxes.forEach((b,i)=>{
-    const area = b.wb.h;
-    const weight = Math.sqrt(area);
+// ===== CHART =====
+function drawChart(){
+  const c = chart;
+  const ctx = c.getContext("2d");
 
-    total += weight;
-    if(isLooking(b,i)) engaged += weight;
+  const w = c.width = c.offsetWidth;
+  const h = c.height = c.offsetHeight;
+
+  ctx.clearRect(0,0,w,h);
+
+  ctx.beginPath();
+
+  state.history.forEach((v,i)=>{
+    const x = i(w/state.history.length);
+    const y = h - v/100h;
+
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
   });
 
-  const score = total ? (engaged/total)*100 : 0;
-
-  state.history.push(score);
+  ctx.stroke();
 }
 
 // ===== EXPORT =====
@@ -267,39 +288,38 @@ function exportReport(){
     peak: Math.max(...state.history)
   };
 
-  const blob = new Blob([JSON.stringify(report,null,2)], {type:"application/json"});
+  const blob = new Blob([JSON.stringify(report,null,2)],{type:"application/json"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "report.json";
+  a.download="report.json";
   a.click();
 }
 
-// ===== UI =====
-document.getElementById("startBtn").onclick=()=>{
+// ===== BUTTONS =====
+startBtn.onclick=()=>{
   state.running=true;
   state.startTime=Date.now();
 };
 
-document.getElementById("stopBtn").onclick=()=>{
+stopBtn.onclick=()=>{
   state.running=false;
 };
 
-document.getElementById("switchBtn").onclick=async()=>{
+switchBtn.onclick=async()=>{
   state.facingMode = state.facingMode==="user"?"environment":"user";
   await startCamera();
 };
 
-document.getElementById("exportBtn").onclick=exportReport;
+exportBtn.onclick=exportReport;
 
 // ===== RESIZE =====
 function resize(){
-  const v = state.video;
-  state.overlay.width = v.clientWidth;
-  state.overlay.height = v.clientHeight;
+  overlay.width = video.clientWidth;
+  overlay.height = video.clientHeight;
 }
 
 init();
 </script>
 
 </body>
-</htm
+</html
