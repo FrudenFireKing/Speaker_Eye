@@ -2,346 +2,154 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Speaker Eye (Fixed Camera)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Speaker Eye AI v2</title>
 
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
 <style>
-body {
-  margin:0;
-  background:#0f172a;
-  color:white;
-  font-family:sans-serif;
-}
-
-.video-wrap {
-  position:relative;
-}
-
-video {
-  width:100%;
-  background:black;
-}
-
-canvas {
-  position:absolute;
-  top:0;
-  left:0;
-}
-
-.ui {
-  padding:12px;
-}
-
-#attention {
-  font-size:48px;
-  text-align:center;
-  font-weight:bold;
-}
-
-#chart {
-  width:100%;
-  height:100px;
-  background:#111;
-  border-radius:10px;
-  margin-top:10px;
-}
-
-.controls {
-  margin-top:10px;
-  display:flex;
-  gap:8px;
-}
-
-button {
-  flex:1;
-  padding:12px;
-  border-radius:12px;
-  border:none;
-  background:#6366f1;
-  color:white;
-  font-weight:bold;
-}
+body{margin:0;background:#0f172a;color:#fff;font-family:sans-serif}
+video{width:100%;background:#000}
+canvas{position:absolute;top:0;left:0;pointer-events:none}
+.wrap{position:relative}
+.panel{padding:12px}
+.big{font-size:46px;text-align:center;font-weight:800}
+.bar{height:10px;background:#1e293b;border-radius:8px;overflow:hidden}
+.fill{height:100%;width:0;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e)}
+button{padding:10px;margin:4px;border:none;border-radius:10px;background:#6366f1;color:#fff;font-weight:600}
 </style>
 </head>
 
 <body>
 
-<div class="video-wrap">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="overlay"></canvas>
+<div class="wrap">
+<video id="video" autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
 </div>
 
-<canvas id="processCanvas" style="display:none"></canvas>
+<div class="panel">
 
-<div class="ui">
-  <div id="attention">Нажмите ▶️</div>
-  <canvas id="chart"></canvas>
+<div class="big" id="score">0</div>
 
-  <div class="controls">
-    <button id="startBtn">▶️ Старт</button>
-    <button id="stopBtn">⏹️ Стоп</button>
-    <button id="switchBtn">🔄 Камера</button>
-    <button id="exportBtn">💾 Экспорт</button>
-  </div>
+<div class="bar"><div class="fill" id="fill"></div></div>
+
+<button id="start">Start AI</button>
+<button id="switch">Switch Camera</button>
+
 </div>
 
 <script>
 const state = {
-  video:null,
-  process:null,
-  ctx:null,
-  overlay:null,
-  octx:null,
-
-  session:null,
-  yoloReady:false,
-
-  running:false,
-  history:[],
-  attention:0,
-  startTime:0,
-
-  stream:null,
-  facingMode:"environment"
+video:null,
+stream:null,
+model:null,
+running:false,
+facing:"user",
+score:0,
+history:[]
 };
 
-// ===== INIT =====
-async function init(){
-  state.video = document.getElementById("video");
-  state.process = document.getElementById("processCanvas");
-  state.ctx = state.process.getContext("2d");
-
-  state.overlay = document.getElementById("overlay");
-  state.octx = state.overlay.getContext("2d");
-
-  resize();
-  window.addEventListener("resize", resize);
-
-  await loadYOLO();
-
-  loop();
-}
-
-// ===== YOLO LOAD (CDN) =====
-async function loadYOLO(){
-  try {
-    console.log("Loading YOLO...");
-    state.session = await ort.InferenceSession.create(
-      "https://huggingface.co/Xenova/yolov8n/resolve/main/model.onnx"
-    );
-    state.yoloReady = true;
-    console.log("YOLO READY");
-  } catch(e){
-    console.warn("YOLO failed → demo mode");
-    state.yoloReady = false;
-  }
-}
-
-// ===== CAMERA (ВАЖНО: только по клику) =====
+// CAMERA
 async function startCamera(){
-  console.log("Requesting camera...");
-
-  if(state.stream){
-    state.stream.getTracks().forEach(t=>t.stop());
-  }
-
-  state.stream = await navigator.mediaDevices.getUserMedia({
-    video:{ facingMode: state.facingMode }
-  });
-
-  state.video.srcObject = state.stream;
-
-  await state.video.play();
-
-  console.log("Camera OK");
+if(state.stream){
+state.stream.getTracks().forEach(t=>t.stop());
 }
 
-// ===== LOOP =====
+state.stream = await navigator.mediaDevices.getUserMedia({
+video:{facingMode:state.facing}
+});
+
+state.video.srcObject = state.stream;
+await state.video.play();
+}
+
+// LOAD AI
+async function loadAI(){
+state.model = await cocoSsd.load();
+console.log("AI READY");
+}
+
+// ATTENTION MODEL
+function computeAttention(preds){
+
+let people = 0;
+let engaged = 0;
+
+preds.forEach(p=>{
+if(p.class==="person"){
+people++;
+
+const area = p.bbox[2]p.bbox[3];
+const normalized = area / (640480);
+
+// closer = more engaged
+if(normalized > 0.08){
+engaged++;
+}
+}
+});
+
+if(people===0) return 30;
+
+return (engaged/people)*100;
+}
+
+// LOOP
 async function loop(){
-  if(state.running){
-    if(state.yoloReady){
-      await processYOLO();
-    } else {
-      processDemo();
-    }
+if(state.running && state.model){
 
-    updateUI();
-  }
+const preds = await state.model.detect(state.video);
 
-  requestAnimationFrame(loop);
+const score = computeAttention(preds);
+
+state.score = score;
+state.history.push(score);
+
+// UI
+document.getElementById("score").textContent = score.toFixed(0);
+document.getElementById("fill").style.width = score+"%";
+
+draw(preds);
 }
 
-// ===== YOLO PROCESS =====
-async function processYOLO(){
-  const w=320,h=240;
-
-  state.process.width=w;
-  state.process.height=h;
-
-  state.ctx.drawImage(state.video,0,0,w,h);
-
-  const img = state.ctx.getImageData(0,0,w,h);
-  const input = preprocess(img);
-
-  const res = await state.session.run({images:input});
-
-  const boxes = fakePostprocess(res);
-
-  computeAttention(boxes);
-  draw(boxes);
+requestAnimationFrame(loop);
 }
 
-// ===== DEMO =====
-function processDemo(){
-  const v = 60 + Math.sin(Date.now()/500)*20;
-  state.attention = v;
-  state.history.push(v);
+// DRAW BOXES
+function draw(preds){
+const c = document.getElementById("overlay");
+const ctx = c.getContext("2d");
+
+c.width = state.video.clientWidth;
+c.height = state.video.clientHeight;
+
+ctx.clearRect(0,0,c.width,c.height);
+
+preds.forEach(p=>{
+if(p.class==="person"){
+ctx.strokeStyle="lime";
+ctx.strokeRect(...p.bbox);
+}
+});
 }
 
-// ===== PREPROCESS =====
-function preprocess(img){
-  const data = img.data;
-  const float = new Float32Array(3*img.width*img.height);
+// START
+start.onclick = async ()=>{
+await startCamera();
+await loadAI();
 
-  for(let i=0;i<img.widthimg.height;i++){
-    float[i] = data[i4]/255;
-    float[i+img.widthimg.height] = data[i4+1]/255;
-    float[i+2img.widthimg.height] = data[i4+2]/255;
-  }
-
-  return new ort.Tensor("float32", float, [1,3,img.height,img.width]);
-}
-
-// ===== TEMP BOXES =====
-function fakePostprocess(){
-  return [
-    {x:0.3,y:0.4,w:0.2,h:0.3,engaged:true},
-    {x:0.6,y:0.5,w:0.1,h:0.2,engaged:false}
-  ];
-}
-
-// ===== ATTENTION =====
-function computeAttention(boxes){
-  let total=0, engaged=0;
-
-  boxes.forEach(b=>{
-    const weight = Math.sqrt(b.wb.h);
-    total += weight;
-    if(b.engaged) engaged += weight;
-  });
-
-  const score = total ? (engaged/total)100 : 0;
-
-  state.attention = score;
-  state.history.push(score);
-}
-
-// ===== DRAW =====
-function draw(boxes){
-  const ctx = state.octx;
-  const w = state.overlay.width;
-  const h = state.overlay.height;
-
-  ctx.clearRect(0,0,w,h);
-
-  boxes.forEach(b=>{
-    const x = (b.x - b.w/2)w;
-    const y = (b.y - b.h/2)h;
-    const bw = b.ww;
-    const bh = b.hh;
-
-    ctx.strokeStyle = b.engaged ? "lime" : "red";
-    ctx.strokeRect(x,y,bw,bh);
-  });
-}
-
-// ===== UI =====
-function updateUI(){
-  document.getElementById("attention").textContent =
-    Math.round(state.attention);
-
-  drawChart();
-}
-
-// ===== CHART =====
-function drawChart(){
-  const c = document.getElementById("chart");
-  const ctx = c.getContext("2d");
-
-  const w = c.width = c.offsetWidth;
-  const h = c.height = c.offsetHeight;
-
-  ctx.clearRect(0,0,w,h);
-
-  ctx.beginPath();
-
-  state.history.forEach((v,i)=>{
-    const x = i(w/state.history.length);
-    const y = h - v/100h;
-
-    if(i===0) ctx.moveTo(x,y);
-    else ctx.lineTo(x,y);
-  });
-
-  ctx.stroke();
-}
-
-// ===== EXPORT =====
-function exportReport(){
-  const avg = state.history.reduce((a,b)=>a+b,0)/state.history.length;
-
-  const report = {
-    duration: Math.floor((Date.now()-state.startTime)/1000),
-    avg,
-    peak: Math.max(...state.history)
-  };
-
-  const blob = new Blob([JSON.stringify(report,null,2)],{type:"application/json"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download="report.json";
-  a.click();
-}
-
-// ===== BUTTONS =====
-
-// 🔥 ВАЖНО: камера стартует здесь
-startBtn.onclick = async ()=>{
-  try {
-    await startCamera();
-
-    state.running = true;
-    state.startTime = Date.now();
-
-    document.getElementById("attention").textContent = "0";
-
-  } catch(e){
-    alert("Разрешите доступ к камере");
-    console.error(e);
-  }
+state.running = true;
 };
 
-stopBtn.onclick=()=>{
-  state.running=false;
+// SWITCH CAMERA
+switch.onclick = async ()=>{
+state.facing = state.facing==="user"?"environment":"user";
+await startCamera();
 };
 
-switchBtn.onclick=async()=>{
-  state.facingMode = state.facingMode==="user"?"environment":"user";
-  await startCamera();
-};
-
-exportBtn.onclick=exportReport;
-
-// ===== RESIZE =====
-function resize(){
-  overlay.width = video.clientWidth;
-  overlay.height = video.clientHeight;
-}
-
-init();
+loop();
 </script>
 
 </body>
-</htm
+</html>
